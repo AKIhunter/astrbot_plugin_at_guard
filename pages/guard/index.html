@@ -11,7 +11,7 @@
     --line: #e4e4e7;
     --line-soft: #f0f0f1;
     --text: #18181b;
-    --muted: #71717a;
+    --muted: #60606b;
     --accent: #2563eb;
     --accent-soft: #eff4ff;
     --ok: #15803d;
@@ -41,17 +41,19 @@
     --bar: #3a3a43;
   }
   * { box-sizing: border-box; }
+  html { scroll-padding-top: 16px; }
   body {
     margin: 0;
-    padding: 18px 18px 40px;
+    padding: 20px 24px 100px;
     background: var(--bg);
     color: var(--text);
     font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
     font-size: 13px;
     line-height: 1.6;
   }
-  .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-  .head h1 { font-size: 16px; font-weight: 600; margin: 0; }
+  .page { max-width: 1320px; margin: 0 auto; }
+  .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  .head h1 { font-size: 20px; font-weight: 650; margin: 0; }
   .head .ver { color: var(--muted); font-size: 12px; }
   .head .spacer { flex: 1; }
   .badge {
@@ -61,14 +63,14 @@
   .badge.on { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
   .badge.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
   .badge.off { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
-  .grid { display: grid; gap: 14px; }
+  .grid { display: grid; gap: 16px; align-items: start; }
   .cols-2 { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); }
   @media (max-width: 880px) { .cols-2 { grid-template-columns: 1fr; } }
   .card {
     background: var(--panel); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 14px 16px;
+    border-radius: var(--radius); padding: 16px 18px; min-width: 0;
   }
-  .card h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  .card h2 { font-size: 14px; font-weight: 650; margin: 0 0 4px; }
   .card .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
   .card-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .card-head-row h2 { margin: 0; }
@@ -88,15 +90,34 @@
   .mode.active { border-color: var(--accent); background: var(--accent-soft); }
   .mode b { display: block; font-weight: 600; margin-bottom: 2px; }
   .mode span { color: var(--muted); font-size: 11.5px; line-height: 1.45; display: block; }
-  .row { display: grid; grid-template-columns: 118px minmax(0, 1fr) 74px; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+  .row { display: grid; grid-template-columns: minmax(120px, .85fr) minmax(0, 1.3fr); align-items: center; gap: 6px 16px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
   .row:last-child { border-bottom: 0; }
-  .row > label { color: var(--muted); font-size: 12.5px; }
-  .row .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
-  .row.wide { grid-template-columns: 118px minmax(0, 1fr); }
-  .row.wide .val { display: none; }
+  .row > label { color: var(--text); font-size: 13px; font-weight: 550; }
+  .field-control { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .field-control > input, .field-control > select, .field-control > textarea { min-width: 0; flex: 1; }
+  .field-control:has(textarea) { grid-column: 1 / -1; }
+  .field-notes { grid-column: 1 / -1; min-width: 0; }
+  .field-desc { color: var(--muted); font-size: 12px; margin: 0; }
+  .field-example { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
+  .field-example b { color: var(--accent); font-weight: 550; margin-right: 4px; }
+  .row .val { min-width: 32px; font-variant-numeric: tabular-nums; font-weight: 650; color: var(--accent); }
+  .row .val:empty { display: none; }
+  .config-heading { margin: 24px 0 14px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .config-heading h2 { font-size: 17px; margin: 0; }
+  .config-heading p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+  .section-links { display: flex; flex-wrap: wrap; gap: 6px; }
+  .section-links a { color: var(--muted); text-decoration: none; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-size: 12px; }
+  .section-links a:hover { color: var(--accent); border-color: var(--accent); }
+  .config-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .section-number { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12px; margin-right: 8px; }
+  .flow-note { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 12px; margin: 10px 0 2px; }
+  .flow-note span { color: var(--muted); }
+  .flow-note b { color: var(--text); font-weight: 550; }
+  .row.inactive { opacity: .78; }
+  .row[hidden] { display: none; }
   input[type="range"] { width: 100%; accent-color: var(--accent); }
-  input[type="number"], input[type="text"], select, textarea {
-    width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
+  input[type="number"], input[type="text"], input[type="search"], select, textarea {
+    width: 100%; padding: 7px 9px; min-height: 34px; border: 1px solid var(--line); border-radius: 6px;
     background: var(--panel); color: var(--text); font-family: inherit; font-size: 12.5px;
   }
   textarea { resize: vertical; min-height: 58px; }
@@ -111,6 +132,8 @@
   button.btn:hover { border-color: var(--accent); color: var(--accent); }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button.primary:hover { opacity: .9; color: #fff; }
+  html[data-theme="dark"] button.primary,
+  html[data-theme="dark"] .save-bar button.primary { color: #111827; }
   button.danger { color: var(--bad); border-color: var(--bad); }
   .msg { font-size: 12px; color: var(--muted); }
   .msg.err { color: var(--bad); }
@@ -120,7 +143,8 @@
   .stat { border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; background: var(--bg); }
   .stat em { display: block; font-style: normal; color: var(--muted); font-size: 11.5px; }
   .stat strong { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .stat small { color: var(--muted); font-size: 11px; }
+  .stat small { display: block; color: var(--muted); font-size: 11px; }
+  td small { display: block; font-size: 11px; color: var(--muted); max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
   .hist { display: flex; align-items: flex-end; gap: 6px; height: 104px; padding: 6px 0 0; border-bottom: 1px solid var(--line); }
   .hist .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
   .hist .bar { width: 100%; border-radius: 3px 3px 0 0; background: var(--bar); min-height: 2px; }
@@ -159,6 +183,23 @@
     color: var(--accent); cursor: pointer; font-size: 11px; padding: 1px 7px; font-family: inherit;
   }
   .raw-cell .raw-open:hover { border-color: var(--accent); }
+  .decision-note { min-width: 240px; max-width: 350px; white-space: normal; }
+  .decision-note p { margin: 0 0 3px; }
+  .decision-note small { display: block; color: var(--muted); font-size: 11px; }
+  .decision-note .raw-open { margin-top: 6px; color: var(--accent); border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+  .decision-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 16px; padding: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+  .decision-summary p { margin: 0; }
+  .decision-summary b { font-weight: 600; }
+  .chat-messages, .attempt-list { padding-left: 24px; margin: 8px 0 16px; }
+  .chat-messages li, .attempt-list li { margin-bottom: 8px; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 6px; }
+  .chat-messages li.current { border-color: var(--accent); background: var(--accent-soft); }
+  .chat-messages li::marker, .attempt-list li::marker { color: var(--accent); font-weight: 650; }
+  .chat-meta { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .chat-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .chat-reference { padding-left: 10px; border-left: 2px solid var(--line); margin-top: 6px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
+  .record-disclosure { margin: 12px 0 0; border-top: 1px solid var(--line); padding-top: 10px; }
+  .record-disclosure summary { cursor: pointer; color: var(--muted); }
+  .record-disclosure pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: var(--bg); padding: 10px; }
   .modal-mask {
     position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000;
     display: none; align-items: center; justify-content: center; padding: 24px;
@@ -234,24 +275,51 @@
   .save-bar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .save-bar button.primary:hover { opacity: .9; color: #fff; }
   .save-bar button.danger { color: var(--bad); border-color: var(--bad); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .section-links a, button, input, select, textarea { scroll-margin-bottom: 100px; }
+  .modal-mask:not(.show), .save-bar:not(.show) { visibility: hidden; }
+  .modal .modal-body { white-space: normal; word-break: normal; overflow-wrap: anywhere; }
+  .help-search { padding: 10px 16px 0; }
+  .help-key { overflow-wrap: anywhere; }
+  .help-item .help-name .help-key { display: block; margin: 2px 0 0; color: var(--muted); }
+  .field-notes, .hintline { overflow-wrap: anywhere; }
+  @media (max-width: 880px) {
+    body { padding: 16px 12px 120px; }
+    .config-columns, .cols-2 { grid-template-columns: 1fr; }
+    .card { padding: 14px 16px; }
+    .head .spacer { display: none; }
+    .head h1 { flex: 1 0 60%; }
+    .row { grid-template-columns: minmax(110px, .8fr) minmax(0, 1fr); gap: 6px 10px; }
+    .modal-mask { padding: 12px; }
+    .save-bar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+    .save-bar .save-bar-text { flex-basis: 100%; }
+  }
+  @media (max-width: 380px) {
+    .row { grid-template-columns: 1fr; }
+    .modes { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+  }
 </style>
 </head>
 <body>
+<main class="page">
 <div class="head">
   <h1>智能过滤控制台</h1>
   <span class="ver" id="ver">v—</span>
   <span class="badge" id="modeBadge">加载中</span>
   <span class="spacer"></span>
   <span class="msg" id="dirtyMsg"></span>
-  <button class="btn" id="helpBtn" title="查看每个配置项的作用与示例">❓ 帮助手册</button>
+  <button class="btn" id="helpBtn" title="查看每个配置项的作用与示例">参数手册</button>
   <button class="btn primary" id="saveBtn">保存参数</button>
-  <span class="msg" id="saveMsg"></span>
+  <span class="msg" id="saveMsg" role="status"></span>
 </div>
 
 <div class="grid cols-2">
   <section class="card">
     <h2>闸门模式</h2>
-    <p class="sub">总开关。改完点右上角保存立即生效，不需要重载插件。</p>
+    <p class="sub">日常使用选「硬闸门」。模式与参数改完统一保存。</p>
     <div class="modes" id="modes"></div>
   </section>
 
@@ -266,69 +334,96 @@
   </section>
 </div>
 
-<section class="card" style="margin-top:14px">
-  <h2>分数分布与阈值扫描</h2>
-  <p class="sub" id="distSub">参与适合度分布；蓝色仅表示分数达标，放行还要求理解上下文且没有否决原因。</p>
-  <div class="hist" id="hist"></div>
-  <div class="axis" id="axis"></div>
-  <div class="kv" id="distKv"></div>
-  <div class="chips" id="chips"></div>
-</section>
+<div class="config-heading">
+  <div><h2>参数配置</h2><p>每项下方都有用途和例子；例子仅帮助理解，不会替你修改配置。</p></div>
+  <nav class="section-links" aria-label="参数分组">
+    <a href="#participation">参与判断</a><a href="#vision">图片兜底</a>
+    <a href="#context">上下文</a><a href="#budget">预算时限</a>
+    <a href="#rhythm">回复节奏</a><a href="#mentions">称呼私聊</a>
+  </nav>
+</div>
+<div class="config-columns">
+    <section class="card" id="participation">
+      <h2><span class="section-number">01</span>参与判断</h2>
+      <p class="sub">先决定什么时候适合接话。</p>
+      <div id="gateFields"></div>
+    </section>
+    <section class="card" id="vision">
+      <h2><span class="section-number">02</span>图片与主模型兜底</h2>
+      <p class="sub">需要图片才能判断时，才走下一层。</p>
+      <div class="flow-note" aria-label="图片判断顺序">
+        <b>文字小模型</b><span>需要看图 →</span><b>多模态模型</b><span>调用异常 →</span><b>会话主模型</b>
+      </div>
+      <div id="visionFields"></div>
+    </section>
+    <section class="card" id="context">
+      <h2><span class="section-number">03</span>上下文与记忆</h2>
+      <p class="sub">让判断和回复知道大家正在聊什么。</p>
+      <div id="contextFields"></div>
+    </section>
+    <section class="card" id="budget">
+      <h2><span class="section-number">04</span>预算与判定时限</h2>
+      <p class="sub">限制每群的模型调用次数和等待时间。</p>
+      <div id="budgetFields"></div>
+    </section>
+    <section class="card" id="rhythm">
+      <h2><span class="section-number">05</span>回复节奏</h2>
+      <p class="sub">控制等待、冷却和重复回复。</p>
+      <div id="replyFields"></div>
+    </section>
+    <section class="card" id="mentions">
+      <h2><span class="section-number">06</span>称呼、空 @ 与私聊</h2>
+      <p class="sub">明确叫机器人时怎么回应，是否过滤私聊。</p>
+      <div id="mentionFields"></div>
+    </section>
+</div>
 
-<div class="grid cols-2" style="margin-top:14px">
+<div class="config-heading">
+  <div><h2>试跑与运行记录</h2><p>先用文字试跑确认结果，再参考真实判定分布。</p></div>
+</div>
+<div class="grid cols-2">
   <section class="card">
-    <h2>判定参数</h2>
-    <p class="sub">分数达标、理解上下文且没有否决原因才放行。</p>
-    <div id="gateFields"></div>
+    <h2>分数分布与阈值扫描</h2>
+    <p class="sub" id="distSub">参与适合度分布；分数达标之外，还需理解上下文且没有否决原因。</p>
+    <div class="hist" id="hist"></div><div class="axis" id="axis"></div>
+    <div class="kv" id="distKv"></div><div class="chips" id="chips"></div>
   </section>
-
   <section class="card">
-    <h2>试跑一条</h2>
-    <p class="sub">不写统计、不占预算，用来验证阈值和小模型口径是否一致。</p>
+    <h2>文字试跑</h2>
+    <p class="sub">只返回判断，不发送消息。不计入插件统计与预算，但会产生模型 API 用量；此处不上传图片。</p>
     <div class="probe">
+      <label for="probeText" class="msg">待判断的消息</label>
       <textarea id="probeText" placeholder="粘贴一条群消息，例如：这个门派怎么加点"></textarea>
+      <label for="probeBot" class="msg">机器人上一句（可选）</label>
       <input id="probeBot" type="text" placeholder="（可选）机器人上一句说了什么" />
       <div class="actions" style="margin-top:0">
         <button class="btn primary" id="probeBtn">判定一下</button>
-        <span class="msg" id="probeMsg"></span>
+        <span class="msg" id="probeMsg" role="status"></span>
       </div>
       <div class="probe-out" id="probeOut"></div>
     </div>
   </section>
 </div>
 
-<div class="grid cols-2" style="margin-top:14px">
-  <section class="card">
-    <h2>回复与防刷屏</h2>
-    <p class="sub">这几项直接决定机器人说话的手感和延迟。</p>
-    <div id="replyFields"></div>
-  </section>
-
-  <section class="card">
-    <h2>称呼与 @ 回复</h2>
-    <p class="sub">机器人称呼会被注册成唤醒词，以它开头的消息直接视为叫它。</p>
-    <div id="mentionFields"></div>
-  </section>
-</div>
-
 <section class="card" style="margin-top:14px">
   <div class="card-head-row">
     <h2>最近判定</h2>
-    <input id="decisionSearch" type="text" placeholder="🔍 搜索模型原话 / 上下文…" autocomplete="off" />
+    <input id="decisionSearch" type="text" aria-label="搜索最近判定的原话和上下文" placeholder="搜索原话或上下文…" autocomplete="off" />
   </div>
-  <p class="sub">分数是参与适合度；修正时显示原始分数。gen_skipped=true 表示闸门已拦截、未调用主模型，原因可能是低分、互聊、结束话题或背景不足。发送阶段取消单独记录。</p>
-  <div class="scroll">
+  <p class="sub">看分数、静默原因及实际判定模型；点「详情」查看当时的上下文。静默表示未生成回复，主模型可能已用于图片异常兜底；发送前取消会单独记录。</p>
+  <div class="scroll" tabindex="0" role="region" aria-label="最近判定记录，可横向滚动">
     <table>
       <thead>
-        <tr><th>时间</th><th>群</th><th>分数</th><th>阈值</th><th>决定</th><th>原因</th><th>耗时</th><th>模型原话</th></tr>
+        <tr><th>序号</th><th>时间</th><th>群</th><th>分数</th><th>阈值</th><th>决定</th><th>原因 / 模型</th><th>耗时</th><th>判断说明</th></tr>
       </thead>
-      <tbody id="decisions"><tr><td colspan="8" class="empty">暂无记录</td></tr></tbody>
+      <tbody id="decisions"><tr><td colspan="9" class="empty">暂无记录</td></tr></tbody>
     </table>
   </div>
 </section>
+</main>
 
 <div class="modal-mask" id="rawModal">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rawModalTitle" tabindex="-1">
     <div class="modal-head">
       <h3 id="rawModalTitle">模型原话</h3>
       <span class="spacer"></span>
@@ -339,12 +434,13 @@
 </div>
 
 <div class="modal-mask" id="helpModal">
-  <div class="modal modal-help">
+  <div class="modal modal-help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" tabindex="-1">
     <div class="modal-head">
-      <h3>配置项帮助手册</h3>
+      <h3 id="helpTitle">参数手册 · 用途与例子</h3>
       <span class="spacer"></span>
       <button class="modal-close" id="helpModalClose">关闭</button>
     </div>
+    <div class="help-search"><input type="search" id="helpSearch" aria-label="搜索参数名称、用途或例子" placeholder="搜索参数，例如：图片、冷却、预算…" /></div>
     <div class="modal-body" id="helpModalBody"></div>
   </div>
 </div>
@@ -366,10 +462,12 @@
 
   function detectTheme() {
     try {
-      const parentDoc = window.parent && window.parent.document;
-      const cls = (parentDoc.documentElement.className || "") + " " + (parentDoc.body ? parentDoc.body.className : "");
+      // 独立预览时parent就是自己，应使用系统主题，不能用自己的浅色背景覆盖它。
+      const parentDoc = window.parent !== window ? window.parent.document : null;
+      const cls = parentDoc
+        ? (parentDoc.documentElement.className || "") + " " + (parentDoc.body ? parentDoc.body.className : "") : "";
       if (/\bdark\b/.test(cls)) return "dark";
-      const bg = parentDoc.body && getComputedStyle(parentDoc.body).backgroundColor;
+      const bg = parentDoc?.body && getComputedStyle(parentDoc.body).backgroundColor;
       const m = bg && bg.match(/^rgb\((\d+), (\d+), (\d+)/);
       if (m) {
         const lum = (Number(m[1]) * 299 + Number(m[2]) * 587 + Number(m[3]) * 114) / 1000;
@@ -397,6 +495,9 @@
 
   const REASON_LABEL = {
     allowed: "放行",
+    directed: "明确邀请机器人参与",
+    continuation: "自然承接机器人发言",
+    useful: "能够提供具体帮助",
     below_threshold: "分数不足",
     model_silent: "模型判定别插嘴",
     others_talking: "群友互聊",
@@ -415,9 +516,16 @@
     parse_error: "输出无法解析",
     error: "调用异常",
     no_provider: "没有可用模型",
+    no_vision_provider: "多模态模型不可用",
+    main_no_vision: "会话主模型不支持图片",
+    reply_no_vision: "图片摘要不足，回复模型无法看图",
+    image_unavailable: "缺少有效图片",
+    vision_budget: "超出视觉判定预算",
+    deadline: "整条判定超时",
+    fallback_same_model: "兜底模型与失败模型相同",
   };
   const MODE_HINT = {
-    enforce: "硬闸门：低分直接拦截，主模型不会被调用",
+    enforce: "硬闸门：静默时不生成回复；视觉异常可使用主模型做一次判定",
     shadow: "观察模式：只记录不拦截，用来校准阈值",
     legacy: "旧行为：先生成再丢弃，仅回滚时用",
     off: "完全解耦：插件不介入任何消息",
@@ -426,26 +534,74 @@
   const GATE_FIELDS = [
     { key: "participation_confidence_threshold", label: "参与阈值", type: "range", min: 0, max: 100, step: 1 },
     { key: "classifier_provider_id", label: "判定模型", type: "provider" },
-    { key: "classifier_timeout_seconds", label: "判定超时(s)", type: "number", min: 0.5, max: 8, step: 0.1 },
-    { key: "gate_context_messages", label: "判定流水条数", type: "number", min: 0, max: 30, step: 1 },
-    { key: "gate_context_max_age_seconds", label: "上下文有效期(s)", type: "number", min: 30, max: 3600, step: 30 },
-    { key: "gate_memory_timeout_seconds", label: "记忆检索超时(s)", type: "number", min: 0.2, max: 5, step: 0.1 },
-    { key: "gate_min_length", label: "最短参与字数", type: "number", min: 0, max: 20, step: 1 },
-    { key: "gate_hourly_budget", label: "每小时判定上限", type: "number", min: 0, max: 600, step: 10 },
+    { key: "classifier_timeout_seconds", label: "文字判定超时", type: "number", min: 0.5, max: 8, step: 0.1, unit: "秒" },
+    { key: "gate_min_length", label: "最短参与字数", type: "number", min: 0, max: 20, step: 1, unit: "字" },
+  ];
+  const VISION_FIELDS = [
+    { key: "vision_provider_id", label: "多模态小模型", type: "provider" },
+    { key: "vision_timeout_seconds", label: "多模态超时", type: "number", min: 0.5, max: 12, step: 0.1, unit: "秒" },
+    { key: "gate_main_fallback_enabled", label: "主模型兜底", type: "bool" },
+    { key: "gate_main_fallback_timeout_seconds", label: "主模型兜底超时", type: "number", min: 0.5, max: 12, step: 0.1, unit: "秒" },
+  ];
+  const CONTEXT_FIELDS = [
+    { key: "gate_context_messages", label: "判定流水条数", type: "number", min: 0, max: 30, step: 1, unit: "条" },
+    { key: "gate_context_max_age_seconds", label: "上下文有效期", type: "number", min: 30, max: 3600, step: 1, unit: "秒" },
+    { key: "gate_memory_timeout_seconds", label: "记忆检索超时", type: "number", min: 0.2, max: 5, step: 0.1, unit: "秒" },
+    { key: "participation_context_messages", label: "回复上下文条数", type: "number", min: 2, max: 30, step: 1, unit: "条" },
+  ];
+  const BUDGET_FIELDS = [
+    { key: "gate_hourly_budget", label: "每小时判定上限", type: "number", min: 0, max: 600, step: 1, unit: "次" },
+    { key: "gate_vision_hourly_budget", label: "每小时视觉上限", type: "number", min: 0, max: 120, step: 1, unit: "次" },
+    { key: "gate_total_timeout_seconds", label: "整条判定时限", type: "number", min: 1, max: 25, step: 0.1, unit: "秒" },
   ];
   const REPLY_FIELDS = [
-    { key: "gate_reply_max_age_seconds", label: "回复机会有效期(s)", type: "number", min: 5, max: 120, step: 1 },
-    { key: "participation_context_messages", label: "回复上下文条数", type: "number", min: 2, max: 30, step: 1 },
-    { key: "fragment_wait_seconds", label: "碎片等待(s)", type: "number", min: 0, max: 5, step: 0.1 },
-    { key: "proactive_cooldown_seconds", label: "主动冷却(s)", type: "number", min: 0, max: 60, step: 1 },
-    { key: "duplicate_window_seconds", label: "去重窗口(s)", type: "number", min: 0, max: 3600, step: 10 },
-    { key: "apply_to_private", label: "作用于私聊", type: "bool" },
+    { key: "fragment_wait_seconds", label: "碎片消息等待", type: "number", min: 0, max: 5, step: 0.1, unit: "秒" },
+    { key: "proactive_cooldown_seconds", label: "主动回复冷却", type: "number", min: 0, max: 60, step: 0.1, unit: "秒" },
+    { key: "duplicate_window_seconds", label: "相同消息去重", type: "number", min: 0, max: 3600, step: 1, unit: "秒" },
+    { key: "gate_reply_max_age_seconds", label: "回复机会有效期", type: "number", min: 5, max: 120, step: 1, unit: "秒" },
   ];
   const MENTION_FIELDS = [
     { key: "bot_names", label: "机器人称呼", type: "list", placeholder: "恰比姐, 恰比" },
     { key: "empty_mention_mode", label: "@ 回复方式", type: "select", options: [["fixed", "固定文案（不调模型）"], ["persona", "按人格生成"]] },
     { key: "empty_mention_reply", label: "@ 固定文案", type: "text", placeholder: "嗯？有事就说。" },
     { key: "empty_mention_persona_prompt", label: "@ 人格要求", type: "textarea" },
+    { key: "apply_to_private", label: "过滤私聊", type: "bool" },
+  ];
+
+  // 就地说明、搜索手册共享同一份文案，避免新参数只更新其中一处。
+  const FIELD_HELP = {
+    participation_confidence_threshold: { desc: "参与适合度至少达到这个分数才有机会放行；还需理解话题，并且没有静默否决。", ex: "设 50：理解清楚且适合度 75 可放行；对方说「别继续了」仍静默。设 0 也不会取消静默否决。" },
+    classifier_provider_id: { desc: "负责先判断是否接话的文字小模型，不负责写回复。留空会跟随会话主模型。", ex: "选择「Qwen/Qwen3-8B（锁定上游）」：日常文字判断固定用它。" },
+    classifier_timeout_seconds: { desc: "只限制一次文字判定的等待时间，超时则静默。", ex: "设 3.5 秒：文字模型超过 3.5 秒还没返回，本次不主动回复。" },
+    gate_min_length: { desc: "归一化后的文字太短就跳过判断；有可用图片的消息除外。设 0 关闭长度过滤。", ex: "设 2 字：「嗯」会被过滤，「怎么打」可以进入判断；纯图片仍可走看图流程。" },
+    vision_provider_id: { desc: "只有图片内容决定是否参与时才使用，同时给回复模型提供图片摘要；正常静默不会再兜底。", ex: "选 qwen3-vl-plus：看图判断并提取摘要；摘要不足时回复仍需原图。留空按主模型兜底开关处理。" },
+    vision_timeout_seconds: { desc: "只限制一次多模态判断；超时或调用失败时，才尝试已开启的主模型兜底。", ex: "设 6 秒：看图模型超过 6 秒未返回，再检查能否用会话主模型兜底。" },
+    gate_main_fallback_enabled: { desc: "多模态模型异常时，让当前会话主模型再判断一次；主模型必须支持图片。", ex: "开启：多模态接口报错 → 主模型兜底；多模态正常说「不该回」就到此结束。" },
+    gate_main_fallback_timeout_seconds: { desc: "开启主模型兜底时，限制这次兜底调用的等待时间。", ex: "设 6 秒：主模型兜底超过 6 秒也未返回，保持静默。" },
+    gate_context_messages: { desc: "参与判断参考多少条近期群聊，包含机器人发言。越多越费输入 Token。", ex: "设 12 条：让小模型参考最近 12 条流水；设 0 不附近期流水。" },
+    gate_context_max_age_seconds: { desc: "只参考这段时间内的流水、机器人上一句及近期图片，避免把旧话题当新话题。", ex: "设 300 秒：5 分钟前的发言不再用于判断当前话题。" },
+    gate_memory_timeout_seconds: { desc: "只有缺少历史背景时，才按当前会话和人格查记忆，最多补查一次。", ex: "设 1.5 秒：「昨天那件事后来呢？」需要查背景，检索超时或没有证据就静默。" },
+    participation_context_messages: { desc: "放行后给主模型补充多少条近期群聊，帮助它写回复；与判定流水条数独立。", ex: "设 12 条：主模型生成时补充最近 12 条流水；不会改变小模型的判定条数。" },
+    gate_hourly_budget: { desc: "每群每小时判定调用的总上限；文字、看图、兜底及记忆复判都计入。0 表示不限。", ex: "设 120 次：一条消息若用了文字和看图两层，就占 2 次，而不是 1 条消息。" },
+    gate_vision_hourly_budget: { desc: "每群的多模态和主模型兜底共用此上限，同时仍受总判定上限约束。0 表示不限这一项。", ex: "设 20 次：看图 1 次再兜底 1 次，共占 2 次；用完后保持静默。" },
+    gate_total_timeout_seconds: { desc: "整条判定流程的总时限，包含文字、看图、兜底和背景检索；不含碎片等待及回复生成。", ex: "设 18 秒：即使各模型都有剩余时间，整条判定超过 18 秒也会停止。" },
+    fragment_wait_seconds: { desc: "普通自主回复先等一会儿，收集紧随其后的碎片消息。0 表示不等。明确呼叫不等待。", ex: "设 1.2 秒：有人连续发「我想问」和「怎么加点」，尽量一起参考；会增加等待时间。" },
+    proactive_cooldown_seconds: { desc: "上次主动回复后，同群在这段时间内不再主动接话。0 表示关闭冷却。", ex: "设 8 秒：机器人刚主动说完，接下来 8 秒不连续抢话。" },
+    duplicate_window_seconds: { desc: "近期已回复的相同文字，在同群的这段时间里不重复回复。0 表示关闭去重。", ex: "设 60 秒：同群一分钟内再次问相同的「怎么下载」，避免重复回答。" },
+    gate_reply_max_age_seconds: { desc: "从收到消息到发送回复的总机会窗口，包含等待、判定和生成；群聊更新也会取消旧回复。", ex: "设 30 秒：等待 4 秒、判定 6 秒后，生成和发送还需在剩余时间内完成。" },
+    bot_names: { desc: "消息以这些名字开头时，视为明确叫机器人，跳过自主参与判定。名称用逗号分隔。", ex: "填「恰比姐，恰比」：「恰比 在吗」会明确唤醒；修改称呼后重载插件以更新框架前缀。" },
+    empty_mention_mode: { desc: "只 @ 机器人、没有具体内容时，选固定一句话，或让当前会话人格生成。", ex: "固定文案：直接回「嗯？有事就说。」；按人格生成：不同会话用各自人格回应。" },
+    empty_mention_reply: { desc: "只在「固定文案」模式生效，不调用模型。", ex: "填「在呢，怎么啦？」：群友只 @ 机器人时直接发送这一句。" },
+    empty_mention_persona_prompt: { desc: "只在「按人格生成」模式生效，补充简短回应要求；人格身份沿用当前会话。", ex: "填「用当前人格的口吻，简短回应一句，不编造用户意图」。" },
+    apply_to_private: { desc: "开启后私聊也受参与判断约束；关闭时本插件跳过私聊，仍由 AstrBot 其他设置决定回复。", ex: "关闭：私聊不被本插件的阈值拦住；开启：私聊理解不清时也可能静默。" },
+  };
+  const FIELD_GROUPS = [
+    { id: "gateFields", title: "参与判断", fields: GATE_FIELDS },
+    { id: "visionFields", title: "图片与主模型兜底", fields: VISION_FIELDS },
+    { id: "contextFields", title: "上下文与记忆", fields: CONTEXT_FIELDS },
+    { id: "budgetFields", title: "预算与判定时限", fields: BUDGET_FIELDS },
+    { id: "replyFields", title: "回复节奏", fields: REPLY_FIELDS },
+    { id: "mentionFields", title: "称呼、空 @ 与私聊", fields: MENTION_FIELDS },
   ];
 
   function themeModeBadge(mode) {
@@ -480,12 +636,16 @@
     ["enforce", "shadow", "legacy", "off"].forEach((mode) => {
       const btn = document.createElement("button");
       btn.className = "mode" + (state.mode === mode ? " active" : "");
-      btn.innerHTML = "<b>" + esc((state.data.modeLabels || {})[mode] || mode) + "</b><span>" + esc(MODE_HINT[mode]) + "</span>";
+      btn.type = "button";
+      btn.dataset.mode = mode;
+      btn.setAttribute("aria-pressed", state.mode === mode ? "true" : "false");
+      btn.innerHTML = "<b>" + esc(({enforce:"硬闸门",shadow:"观察模式",legacy:"旧行为",off:"完全解耦"})[mode]) + "</b><span>" + esc(MODE_HINT[mode]) + "</span>";
       btn.addEventListener("click", () => {
         state.mode = mode;
         setDirty("gate_mode", mode);
         renderModes();
         themeModeBadge(mode);
+        host.querySelector('[data-mode="' + mode + '"]')?.focus();
       });
       host.appendChild(btn);
     });
@@ -518,14 +678,17 @@
   }
 
   function buildField(field, value, host) {
-    const wide = field.type === "textarea" || field.type === "list" || field.type === "text";
     const row = document.createElement("div");
-    row.className = "row" + (wide ? " wide" : "");
+    row.className = "row";
+    row.dataset.key = field.key;
     const label = document.createElement("label");
     label.textContent = field.label;
+    label.htmlFor = "field-" + field.key;
     const cell = document.createElement("div");
+    cell.className = "field-control";
     const out = document.createElement("div");
     out.className = "val";
+    out.textContent = field.unit || "";
 
     if (field.type === "range") {
       const input = document.createElement("input");
@@ -570,15 +733,20 @@
         select.appendChild(opt);
       });
       select.value = value || "";
-      select.addEventListener("change", () => setDirty(field.key, select.value));
+      select.addEventListener("change", () => {
+        setDirty(field.key, select.value);
+        syncFieldAvailability();
+      });
       cell.appendChild(select);
     } else if (field.type === "provider") {
       const select = document.createElement("select");
       const follow = document.createElement("option");
       follow.value = "";
-      follow.textContent = "跟随会话当前模型（不推荐）";
+      follow.textContent = field.key === "vision_provider_id"
+        ? "未配置（按兜底开关处理）" : "跟随会话当前模型（不推荐）";
       select.appendChild(follow);
-      (state.data.providers || []).forEach((p) => {
+      (state.data.providers || []).filter(p =>
+        field.key !== "vision_provider_id" || p.supports_images === true).forEach((p) => {
         const opt = document.createElement("option");
         if (p.kind === "router_upstream") {
           // 路由下的具体上游模型：锁定后跳过优先级自动降级，直连该模型。
@@ -595,15 +763,23 @@
         }
         select.appendChild(opt);
       });
+      if (value && !Array.from(select.options).some(option => option.value === value)) {
+        const unavailable = document.createElement("option");
+        unavailable.value = value;
+        unavailable.textContent = value + "（当前不可用或不支持图片，请更换）";
+        unavailable.disabled = true;
+        select.appendChild(unavailable);
+      }
       select.value = value || "";
       const tip = document.createElement("div");
       tip.className = "hintline";
       const initial = value || "";
       const paint = () => {
-        tip.textContent = providerHint(select.value);
+        tip.textContent = select.value ? "当前选择：" + select.options[select.selectedIndex]?.textContent
+          : field.key === "vision_provider_id" ? "未配置多模态模型。" : providerHint("");
         if (select.value !== initial) {
           // 分数尺度是跟模型走的，换模型不重标定等于沿用别人的阈值。
-          tip.textContent += "；⚠ 换判定模型后分数尺度会变，阈值需重新标定：先切「观察模式」攒够样本，再回来看分布。";
+          tip.textContent += "；模型已更换，保存后请重新观察分数尺度。";
           tip.classList.add("warn");
         } else {
           tip.classList.remove("warn");
@@ -615,7 +791,8 @@
         paint();
       });
       cell.appendChild(select);
-      cell.appendChild(tip);
+      tip.id = "provider-note-" + field.key;
+      row.appendChild(tip);
     } else if (field.type === "bool") {
       const wrap = document.createElement("div");
       wrap.className = "switch";
@@ -624,10 +801,14 @@
       input.checked = !!value;
       const tip = document.createElement("span");
       tip.className = "msg";
-      tip.textContent = input.checked ? "私聊也走判定" : "私聊直接放行";
+      const boolHint = () => field.key === "gate_main_fallback_enabled"
+        ? (input.checked ? "视觉异常时兜底一次" : "视觉异常则静默")
+        : (input.checked ? "私聊也走判定" : "私聊直接放行");
+      tip.textContent = boolHint();
       input.addEventListener("change", () => {
         setDirty(field.key, input.checked);
-        tip.textContent = input.checked ? "私聊也走判定" : "私聊直接放行";
+        tip.textContent = boolHint();
+        syncFieldAvailability();
       });
       wrap.appendChild(input);
       wrap.appendChild(tip);
@@ -636,19 +817,60 @@
 
     row.appendChild(label);
     row.appendChild(cell);
-    row.appendChild(out);
+    cell.appendChild(out);
+    const control = cell.querySelector("input, select, textarea");
+    control.id = "field-" + field.key;
+    control.setAttribute("aria-describedby", "notes-" + field.key);
+    const notes = document.createElement("div");
+    notes.className = "field-notes";
+    notes.id = "notes-" + field.key;
+    const help = FIELD_HELP[field.key];
+    const desc = document.createElement("p");
+    desc.className = "field-desc";
+    desc.textContent = help.desc;
+    const example = document.createElement("p");
+    example.className = "field-example";
+    const exampleLabel = document.createElement("b");
+    exampleLabel.textContent = "例";
+    example.appendChild(exampleLabel);
+    example.appendChild(document.createTextNode(help.ex));
+    notes.appendChild(desc);
+    notes.appendChild(example);
+    const providerNote = row.querySelector(".hintline");
+    if (providerNote) notes.appendChild(providerNote);
+    row.appendChild(notes);
     host.appendChild(row);
   }
 
   function renderFields() {
     const cfg = state.data.config || {};
-    [["gateFields", GATE_FIELDS], ["replyFields", REPLY_FIELDS], ["mentionFields", MENTION_FIELDS]].forEach(([id, fields]) => {
+    FIELD_GROUPS.forEach(({id, fields}) => {
       const host = el(id);
       host.innerHTML = "";
       fields.forEach((field) => {
         const value = Object.prototype.hasOwnProperty.call(state.draft, field.key) ? state.draft[field.key] : cfg[field.key];
         buildField(field, value, host);
       });
+    });
+    syncFieldAvailability();
+  }
+
+  function currentConfig(key) {
+    return Object.prototype.hasOwnProperty.call(state.draft, key)
+      ? state.draft[key] : (state.data.config || {})[key];
+  }
+
+  function syncFieldAvailability() {
+    const active = {
+      empty_mention_reply: currentConfig("empty_mention_mode") === "fixed",
+      empty_mention_persona_prompt: currentConfig("empty_mention_mode") === "persona",
+      gate_main_fallback_timeout_seconds: currentConfig("gate_main_fallback_enabled") === true,
+    };
+    Object.entries(active).forEach(([key, enabled]) => {
+      const control = el("field-" + key);
+      if (!control) return;
+      control.disabled = !enabled;
+      control.closest(".row").classList.toggle("inactive", !enabled);
     });
   }
 
@@ -753,11 +975,94 @@
       ["模型调用", t.model_calls || 0, "超时 " + (t.timeouts || 0) + " · 解析失败 " + (t.parse_errors || 0)],
       ["放行 / 静默", (t.allowed || 0) + " / " + (t.silenced || 0), "省下生成 " + (t.gen_skipped || 0) + " 次"],
       ["累计判断", life.total || 0, "放行 " + (life.allowed || 0) + " · 静默 " + (life.blocked || 0)],
-      ["累计平均分", life.average || 0, "分布看上方「分数分布」块"],
+      ["累计平均分", life.average || 0, "详细分布见下方运行记录"],
     ];
     el("stats").innerHTML = cells.map(([k, v, s]) =>
       '<div class="stat"><em>' + esc(k) + "</em><strong>" + esc(v) + "</strong><small>" + esc(s) + "</small></div>"
     ).join("");
+  }
+
+  const STAGE_LABEL = {text:"文字判断",vision:"多模态看图",main_fallback:"主模型兜底"};
+  const GROUND_LABEL = {none:"不需要额外背景",memory:"需要查历史记忆",web:"需要核实外部事实"};
+  const HANDOFF_LABEL = {summary:"摘要已足够，回复参考摘要",
+    summary_and_original:"摘要与原图一起供回复参考",original:"未得到完整摘要，回复仍需原图"};
+  const STATUS_LABEL = {ok:"返回有效判断",timeout:"调用超时",error:"调用异常",
+    parse_error:"输出格式不完整",no_vision_provider:"视觉模型不可用",
+    main_no_vision:"主模型不支持图片",budget:"总预算用完",vision_budget:"视觉预算用完",
+    deadline:"整条判定超时",fallback_same_model:"兜底与失败模型相同"};
+  const decodeChatText = value => String(value || "").replace(/&quot;|&#39;|&lt;|&gt;|&amp;/g,
+    code=>({"&quot;":'"',"&#39;":"'","&lt;":"<","&gt;":">","&amp;":"&"})[code]);
+
+  function jsonObjects(raw) {
+    // 按字符串/括号边界容错取JSON，避免图片摘要中的嵌套对象被当成独立评分。
+    const text = String(raw || "").slice(0, 12000);
+    const result = [];
+    for (let start=0, tries=0; start<text.length && tries<16 && result.length<4; tries++) {
+      start = text.indexOf("{", start);
+      if (start<0) break;
+      let depth=0, quoted=false, escaped=false, end=start;
+      for (; end<text.length; end++) {
+        const c=text[end];
+        if (quoted) {
+          if(escaped) escaped=false;
+          else if(c==="\\") escaped=true;
+          else if(c==='"') quoted=false;
+        } else if(c==='"') quoted=true;
+        else if(c==="{") depth++;
+        else if(c==="}" && --depth===0) { end++; break; }
+      }
+      try { result.push(JSON.parse(text.slice(start,end))); start=end; }
+      catch { start++; }
+    }
+    return result;
+  }
+
+  function decisionData(row) {
+    const raw = jsonObjects(row.raw).find(item => ["conf","confidence","score"].some(key=>key in item)) || {};
+    const detail = {...raw, ...row};
+    if(!("understood" in row)) detail.understood=raw.understood;
+    if(!row.model_reason) detail.model_reason=raw.reason;
+    if(!row.image_summaries) detail.image_summaries=raw.image_summaries || [];
+    return detail;
+  }
+
+  function chatData(row) {
+    const data = row.chat_data && typeof row.chat_data === "object" ? row.chat_data : null;
+    return data?.current_message ? data : jsonObjects(row.ctx).find(item =>
+      item.current_message && typeof item.current_message==="object") || null;
+  }
+
+  function chatMessage(line) {
+    if(line && typeof line==="object") return line;
+    let text=decodeChatText(line);
+    const age=text.match(/^\[(\d+)秒前\]\s*/);
+    text=text.replace(/^\[\d+秒前\]\s*/, "");
+    const parsed=jsonObjects(text).find(item=>typeof item.text==="string");
+    if(parsed) return {...parsed, age_seconds:age ? Number(age[1]) : parsed.age_seconds};
+    const bot=text.startsWith("[我]:");
+    return {text:bot ? text.slice(4).trim() : text, sender_name:bot?"机器人":"未记录发送者",
+      age_seconds:age ? Number(age[1]) : undefined};
+  }
+
+  function understanding(value) {
+    return value===true || value==="true" ? "已理解话题与交流对象" :
+      value===false || value==="false" ? "尚未理解完整背景" : "原记录未说明是否理解";
+  }
+
+  function readingNote(row) {
+    const d=decisionData(row);
+    if(row.src==="delivery") return REASON_LABEL[row.reason] || "发送前取消了旧回复";
+    if(row.src==="rule") return "规则过滤：" + (REASON_LABEL[row.reason] || row.reason);
+    if(row.src==="error") return "未完成有效判定：" + (REASON_LABEL[row.reason] || row.reason);
+    const act=d.act==="reply" ? "模型建议参与" : d.act==="silent" ? "模型建议静默" : "未记录模型动作";
+    return act + " · " + understanding(d.understood);
+  }
+
+  function contextNote(row) {
+    const chat=chatData(row);
+    if(chat?.not_sent) return "未调用模型 · 当前候选消息 1 条";
+    return chat ? "参考流水 " + (chat.recent_messages_old_to_new || []).length + " 条＋当前消息 1 条" :
+      (row.ctx ? "旧记录未分条保存，详情保留原文" : "没有调用上下文记录");
   }
 
   function renderDecisions() {
@@ -767,120 +1072,181 @@
       ? all.filter((d) => {
           const raw = d.raw == null ? "" : String(d.raw);
           const ctx = d.ctx == null ? "" : String(d.ctx);
-          return raw.toLowerCase().indexOf(q) !== -1 || ctx.toLowerCase().indexOf(q) !== -1;
+          return [raw,ctx,readingNote(d),d.mdl,JSON.stringify(d.chat_data || {}),
+            JSON.stringify(d.image_summaries || [])].join(" ").toLowerCase().includes(q);
         })
       : all;
     const body = el("decisions");
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="8" class="empty">' + (q ? "无匹配结果" : "暂无记录") + "</td></tr>";
+      body.innerHTML = '<tr><td colspan="9" class="empty">' + (q ? "无匹配结果" : "暂无记录") + "</td></tr>";
       return;
     }
     body.innerHTML = rows.map((d) => {
       const cls = d.action === "reply" ? "reply" : "silence";
       const text = d.action === "reply" ? "放行" : "静默";
-      const raw = d.raw == null ? "" : String(d.raw);
-      const ctx = d.ctx == null ? "" : String(d.ctx);
-      const rawCell = raw || ctx
-        ? '<div class="raw-cell"><span class="raw-text" title="' + esc(raw) + '">' + esc(raw || "—") +
-          '</span><button class="raw-open" type="button" data-raw="' + esc(raw) + '" data-ctx="' + esc(ctx) + '">详情</button></div>'
-        : '<span class="raw-text" style="color:var(--muted)">—</span>';
+      const index=all.indexOf(d);
+      const chat=chatData(d);
+      const current=chat?.current_message?.text || (chat ? "[图片或空文字消息]" : "");
+      const rawCell='<div class="decision-note"><p>' + esc(readingNote(d)) + '</p><small>' +
+        esc(contextNote(d)) + '</small>' + (current ? '<small>当前：' + esc(current.slice(0,100)) + '</small>' : "") +
+        '<button class="raw-open" type="button" data-decision="' + index + '">查看判断详情</button></div>';
       return "<tr>" +
+        "<td>" + (index+1) + "</td>" +
         "<td>" + esc(fmtTime(d.ts)) + "</td>" +
         "<td>" + esc(d.gid || "—") + "</td>" +
         "<td>" + esc(d.score) + (d.corrected ? '<small title="模型输出与参与定义矛盾，已保留静默并修正评分">（原始 ' + esc(d.raw_score) + '）</small>' : "") + "</td>" +
         "<td>" + esc(d.th) + "</td>" +
         '<td><span class="pill ' + cls + '">' + text + "</span></td>" +
-        "<td>" + esc(REASON_LABEL[d.reason] || d.reason || "—") + "</td>" +
+        "<td>" + esc(REASON_LABEL[d.reason] || d.reason || "—") +
+        (d.stage ? '<small>' +
+          esc(STAGE_LABEL[d.stage] || d.stage) +
+          " · " + esc(d.mdl || "") + "</small>" : "") + "</td>" +
         "<td>" + esc(d.ms) + "ms</td>" +
         "<td>" + rawCell + "</td>" +
         "</tr>";
     }).join("");
     Array.prototype.forEach.call(body.querySelectorAll(".raw-open"), (btn) => {
       btn.addEventListener("click", () => {
-        const row = btn.closest("tr");
-        const time = row && row.children[0] ? row.children[0].textContent : "";
-        const score = row && row.children[2] ? row.children[2].textContent : "";
-        const reason = row && row.children[5] ? row.children[5].textContent : "";
-        openRawModal(btn.getAttribute("data-raw") || "", btn.getAttribute("data-ctx") || "", time, score, reason);
+        openRawModal(all[Number(btn.dataset.decision)], Number(btn.dataset.decision)+1);
       });
     });
   }
 
-  function openRawModal(raw, ctx, time, score, reason) {
-    el("rawModalTitle").textContent =
-      "判定详情" + (time ? " · " + time : "") + (score ? " · " + score + " 分" : "") + (reason ? " · " + reason : "");
+  function openRawModal(row, number) {
+    const d=decisionData(row);
+    const chat=chatData(row);
+    el("rawModalTitle").textContent = "第 " + number + " 条判定 · " + fmtTime(row.ts);
     const body = el("rawModalBody");
     body.innerHTML = "";
-    const ctxTitle = document.createElement("div");
-    ctxTitle.className = "modal-sec";
-    ctxTitle.textContent = "判定上下文（送给模型的 prompt）";
-    const ctxText = document.createElement("div");
-    ctxText.className = "modal-sec-body";
-    ctxText.textContent = ctx || "（这条记录没有上下文：可能是规则层直接拦截，或升级前的旧日志）";
-    const rawTitle = document.createElement("div");
-    rawTitle.className = "modal-sec";
-    rawTitle.textContent = "模型结论（原话返回）";
-    const rawText = document.createElement("div");
-    rawText.className = "modal-sec-body mono";
-    rawText.textContent = raw || "（无模型返回：可能是超时、调用异常或规则层拦截）";
-    body.appendChild(ctxTitle);
-    body.appendChild(ctxText);
-    body.appendChild(rawTitle);
-    body.appendChild(rawText);
-    el("rawModal").classList.add("show");
+    const summary=document.createElement("div");
+    summary.className="decision-summary";
+    const values=[
+      ["最终结果",row.action==="reply"?"放行（允许生成，不代表已发送）":"静默"],
+      ["参与适合度",String(row.score ?? "—")+" / 100 · 阈值 "+String(row.th ?? "—")],
+      ["模型动作",d.act==="reply"?"建议参与":d.act==="silent"?"建议静默":"未记录"],
+      ["理解状态",understanding(d.understood)],
+      ["参与理由",REASON_LABEL[d.model_reason] || REASON_LABEL[row.reason] || row.reason || "未记录"],
+      ["背景需求",GROUND_LABEL[d.ground] || "未记录"],
+      ["判定模型",row.mdl || "未记录"],
+      ["本次用时",String(row.ms ?? "—")+" ms"],
+    ];
+    values.forEach(([label,value])=>{
+      const p=document.createElement("p"); const b=document.createElement("b");
+      b.textContent=label+"："; p.append(b,document.createTextNode(value)); summary.appendChild(p);
+    });
+    body.appendChild(summary);
+    const section=(title, text)=>{
+      const h=document.createElement("h4"); h.className="modal-sec"; h.textContent=title; body.appendChild(h);
+      if(text) {const p=document.createElement("p");p.textContent=text;body.appendChild(p);}
+    };
+    if(row.corrected) section("分数修正", "模型原始给分 "+row.raw_score+
+      "，与静默或未理解状态矛盾；插件保留否决，参与适合度修正为 "+row.score+"。");
+    const attempts=Array.isArray(row.attempts)?row.attempts:[];
+    if(attempts.length) {
+      section("模型调用过程 · "+attempts.length+" 次尝试");
+      const list=document.createElement("ol"); list.className="attempt-list";
+      attempts.forEach(a=>{
+        const li=document.createElement("li");
+        li.textContent=(STAGE_LABEL[a.stage]||a.stage)+" · "+(a.model||"未选到模型")+" · "+
+          (STATUS_LABEL[a.status]||a.status)+" · "+(a.ms ?? 0)+" ms";
+        if(a.status==="ok") {
+          const small=document.createElement("div");small.className="chat-meta";
+          small.textContent=(a.act==="reply"?"建议参与":"建议静默")+"，参与分 "+a.score+
+            "，"+(REASON_LABEL[a.reason]||a.reason)+"，"+understanding(a.understood);
+          li.appendChild(small);
+        }
+        list.appendChild(li);
+      });
+      body.appendChild(list);
+    }
+    const summaries=Array.isArray(d.image_summaries)?d.image_summaries.filter(item=>item && typeof item==="object"):[];
+    if(summaries.length) {
+      section("视觉模型的图片观察", "摘要是模型观察，可能不完整，不是已经核实的事实。"+
+        (row.action==="reply" ? (HANDOFF_LABEL[row.image_handoff]||"") : "本次静默，未交给回复模型生成。"));
+      summaries.forEach(item=>{
+        const p=document.createElement("p");
+        const source=row.image_sources?.[item.image-1];
+        p.textContent="图片 "+item.image+(source ? "（"+
+          ({current:"当前消息",reply:"引用消息",recent:"近期流水"})[source.source]+
+          (source.sender_id ? " · "+source.sender_id : "")+"）":"")+"："+item.summary;
+        if(item.uncertainty) p.textContent+="\n不确定点："+item.uncertainty;
+        p.className="chat-text";body.appendChild(p);
+      });
+    }
+    section("参与判断的消息", contextNote(row)+"。"+(chat?.not_sent ?
+      "本次没有发送模型请求，下面仅显示被规则过滤或取模型失败的候选消息。" :
+      "下面是本次判定实际参考的内容，序号按输入顺序排列；当前消息单列，不代表它一定晚于等待期间的新消息。"));
+    if(chat) {
+      const lines=Array.isArray(chat.recent_messages_old_to_new)?chat.recent_messages_old_to_new:[];
+      const list=document.createElement("ol");list.className="chat-messages";
+      [...lines.map(chatMessage),chat.current_message].forEach((message,index)=>{
+        const li=document.createElement("li");
+        if(index===lines.length) li.className="current";
+        const meta=document.createElement("div");meta.className="chat-meta";
+        meta.textContent=(index===lines.length?"当前消息 · ":"参考流水 · ")+
+          (message.sender_name||message.sender_id||"未记录发送者")+
+          (message.sender_id && message.sender_name ? "（"+message.sender_id+"）":"")+
+          (message.age_seconds!=null ? " · "+message.age_seconds+" 秒前":"");
+        const content=document.createElement("div");content.className="chat-text";
+        content.textContent=message.text||"[图片或空文字消息]";
+        li.append(meta,content);
+        if(message.unread_media?.length) {
+          const media=document.createElement("div");media.className="chat-meta";
+          media.textContent="附带媒体："+message.unread_media.join("、");li.appendChild(media);
+        }
+        (Array.isArray(message.reply_to)?message.reply_to:[]).forEach(reference=>{
+          const quote=document.createElement("div");quote.className="chat-reference";
+          quote.textContent="引用 "+(reference.sender_name||reference.sender_id||"未知对象")+"："+(reference.text||"[无引用文字]");
+          li.appendChild(quote);
+        });
+        list.appendChild(li);
+      });
+      body.appendChild(list);
+      if(chat.recent_bot_message) section("补充：机器人近期上一句（不另计消息条数）",chat.recent_bot_message);
+      if(chat.scoped_memory?.length) section("补充：本会话背景记忆（不计流水条数）",chat.scoped_memory.join("\n"));
+    } else {
+      const p=document.createElement("p");p.className="chat-text";
+      p.textContent=row.ctx || "原记录未保存上下文；规则过滤或调用失败时可能没有发送判定请求。";
+      body.appendChild(p);
+    }
+    const disclosure=document.createElement("details");disclosure.className="record-disclosure";
+    const caption=document.createElement("summary");caption.textContent="原始输出与请求资料（排查时展开）";
+    disclosure.appendChild(caption);
+    [row.raw,row.ctx].forEach((value,index)=>{
+      const h=document.createElement("h4");h.textContent=index===0?"模型原始输出":"判定原始输入";
+      const pre=document.createElement("pre");pre.textContent=value||"未记录";
+      disclosure.append(h,pre);
+    });
+    body.appendChild(disclosure);
+    toggleDialog("rawModal", true);
   }
 
   function closeRawModal() {
-    el("rawModal").classList.remove("show");
+    toggleDialog("rawModal", false);
   }
 
-  // ---- 帮助手册：每个配置项的作用 + 例子 ----
+  // ---- 模式说明 + 与就地提示一致的完整参数手册 ----
   const HELP_MANUAL = [
     {
       title: "闸门模式（总开关）",
       items: [
-        { name: "硬闸门", key: "gate_mode=enforce", desc: "默认。每次判定后，低分消息直接拦截，主模型不会被调用，最省成本。", ex: "群里有人闲聊「今天好累」，判定 30 分 < 阈值 65 → 机器人不回复，省一次主模型调用。" },
-        { name: "观察模式", key: "gate_mode=shadow", desc: "只判定、只记录，不拦截。用来攒样本、校准阈值，不影响机器人行为。", ex: "切到观察模式跑一天，看「分数分布」里真实分数落在哪，再回来定阈值。" },
+        { name: "硬闸门", key: "gate_mode=enforce", desc: "日常运行。静默消息不会生成回复；主模型仍可能用于图片异常兜底判定。", ex: "阈值 50、参与分 30：不生成回复。结束话题即使误得高分也不放行。" },
+        { name: "观察模式", key: "gate_mode=shadow", desc: "继续判定和记录，但不按判定结果拦截回复；生成费用可能增加。", ex: "想观察新模型的打分尺度时使用。判定静默也可能继续生成回复。" },
         { name: "旧行为", key: "gate_mode=legacy", desc: "先生成再丢弃（旧逻辑），只在回滚时用，平时别选。", ex: "新逻辑出问题时临时切回，保证行为可预期。" },
-        { name: "已解耦", key: "gate_mode=off", desc: "插件完全不介入任何消息，等于关闭本插件。", ex: "想临时彻底关掉过滤，选这个。" },
+        { name: "完全解耦", key: "gate_mode=off", desc: "不判定、不拦截、不记录；机器人仍受 AstrBot 和其他插件设置影响。", ex: "临时停用过滤选此项；称呼前缀的框架注册在插件启动时更新。" },
       ],
     },
-    {
-      title: "判定参数",
-      items: [
-        { name: "参与阈值", key: "participation_confidence_threshold", desc: "分数是此刻参与的适合度，不是对静默的置信度。分数达标、understood=true、act=reply且没有否决原因才放行。", ex: "「行吧，到此为止」应低分静默；即使模型误打91分，也会保留静默，修正为不超过40分并显示原始分数。" },
-        { name: "判定模型", key: "classifier_provider_id", desc: "做参与判定用的小模型。空 = 跟随会话当前模型。换模型后分数尺度会变，阈值要重新标定。若选「多 API 模型路由」，下拉里还会展开它下面的每个具体上游模型（└ 标记），选中即锁定该模型、跳过自动降级。", ex: "选 deepseek-flash 又快又便宜；选「└ Qwen/Qwen3-8B（锁定上游）」则判定固定用这个便宜模型。" },
-        { name: "判定超时", key: "classifier_timeout_seconds", desc: "等判定模型返回的最长秒数。超时按「别插嘴」处理（宁可少说，不刷屏）。", ex: "设 3.5s：模型 3 秒没回 → 判定失败，机器人静默。" },
-        { name: "判定流水条数", key: "gate_context_messages", desc: "送给判定模型的最近聊天条数。越多上下文越准，但越费 token。", ex: "设 8：把最近 8 句话一起给模型，让它知道在聊什么。" },
-        { name: "最短参与字数", key: "gate_min_length", desc: "消息归一化后不足这个字数，直接静默，连模型都不调（省成本）。", ex: "设 2：「嗯」「哦」这类单字不发判定。" },
-        { name: "每小时判定上限", key: "gate_hourly_budget", desc: "每小时最多调多少次判定模型。超出后消息直接静默，防止模型费用失控。", ex: "设 60：活跃群一小时最多判 60 条，之后自动静默。" },
-      ],
-    },
-    {
-      title: "回复与防刷屏",
-      items: [
-        { name: "回复上下文条数", key: "participation_context_messages", desc: "放行后，送给主模型生成回复的上下文条数（和判定条数分开，省 token）。", ex: "判定用 8 条，主模型回复只需 4 条就够，分开配。" },
-        { name: "碎片等待", key: "fragment_wait_seconds", desc: "收到消息后等多久再判定，把同一句话拆成几条发的碎片合并起来。", ex: "设 1.2s：有人「我 / 想 / 问个事」分三条发，等 1.2 秒拼成一句再判。" },
-        { name: "主动冷却", key: "proactive_cooldown_seconds", desc: "机器人上次主动发言后，多久内不再主动插话，避免连续刷屏。", ex: "设 8s：刚说过话 8 秒内，来了新消息也不主动接。" },
-        { name: "去重窗口", key: "duplicate_window_seconds", desc: "同一句话在窗口内被问过，第二次不再重复回答。", ex: "设 120s：两人先后问「怎么下载」，只答第一个。" },
-        { name: "作用于私聊", key: "apply_to_private", desc: "开关：私聊是否也走参与判定。关 = 私聊直接放行（默认）。", ex: "关：私聊永远回复；开：私聊也按分数判定。" },
-      ],
-    },
-    {
-      title: "称呼与 @ 回复",
-      items: [
-        { name: "机器人称呼", key: "bot_names", desc: "机器人的名字，会被注册成唤醒词。以它开头的消息直接视为叫它，跳过参与判定。", ex: "设「恰比姐, 恰比」：「恰比 在吗」会直接唤醒机器人。" },
-        { name: "@ 回复方式", key: "empty_mention_mode", desc: "被 @ 但没实质内容时怎么回：固定文案（不调模型）或按人格生成。", ex: "固定文案省成本；人格生成更像真人。" },
-        { name: "@ 固定文案", key: "empty_mention_reply", desc: "上面选「固定文案」时，被 @ 就回这句。", ex: "设「嗯？有事就说。」被 @ 直接回这句。" },
-        { name: "@ 人格要求", key: "empty_mention_persona_prompt", desc: "上面选「按人格生成」时，这段会作为人格提示词喂给主模型。", ex: "「你是群里的老玩家，用轻松口语回应 @ 你的消息」。" },
-      ],
-    },
+    ...FIELD_GROUPS.map(group => ({
+      title: group.title,
+      items: group.fields.map(field => ({ name: field.label, key: field.key, ...FIELD_HELP[field.key] })),
+    })),
     {
       title: "其它说明",
       items: [
-        { name: "分数分布 / 阈值扫描", key: "distribution", desc: "按当前判定模型的口径，展示最近打分的完整直方图和「阈值设在 X 会放行百分之多少」的曲线。换模型后样本会重新按模型分开统计。", ex: "点「放行率≈20% → 阈值 78」这个建议，可一键填入阈值输入框（还需点保存）。" },
-        { name: "试跑一条", key: "probe", desc: "不写统计、不占预算，手动喂一条消息看判定结果，验证阈值和小模型口径是否一致。", ex: "粘贴一条群消息点「判定一下」，看它给多少分、放不放行。" },
-        { name: "最近判定", key: "decisions", desc: "每条判定留痕：分数、阈值、决定、原因、耗时、模型原话和判定上下文。点「详情」看模型当时看到了什么、回了什么。", ex: "某条被静默，点详情看上下文判断模型是不是误判。" },
+        { name: "分数分布与阈值扫描", key: "distribution", desc: "按文字判定模型和新协议统计；视觉/兜底样本不混入。样本放行率不保证将来发言比例。", ex: "点一个建议阈值只会填入参数，仍需保存；还应检查互聊、停口是否被正确静默。" },
+        { name: "文字试跑", key: "probe", desc: "不发消息、不计插件统计和预算，但实际调用模型API；只支持文字输入。", ex: "填「怎么加点？」和机器人上一句，查看得分和原因。" },
+        { name: "最近判定", key: "decisions", desc: "默认显示中文判断说明、流水条数和当前消息；详情按序号展示模型过程、图片摘要与聊天内容，原始JSON可展开排查。", ex: "显示「参考流水2条＋当前消息1条」；详情编号1、2是参考消息，3是当前消息。" },
+        { name: "保存与放弃", key: "save", desc: "只有点击保存后配置才生效。放弃更改只撤销当前页面未保存的值。", ex: "调两项后底部显示「2项未保存」；点保存统一更新。" },
       ],
     },
   ];
@@ -888,13 +1254,19 @@
   function renderHelp() {
     const body = el("helpModalBody");
     body.innerHTML = "";
+    const query = el("helpSearch").value.trim().toLowerCase();
+    let count = 0;
     HELP_MANUAL.forEach((group) => {
+      const items = group.items.filter(item => !query ||
+        [group.title, item.name, item.key, item.desc, item.ex].join(" ").toLowerCase().includes(query));
+      if (!items.length) return;
       const g = document.createElement("div");
       g.className = "help-group";
       const h4 = document.createElement("h4");
       h4.textContent = group.title;
       g.appendChild(h4);
-      group.items.forEach((item) => {
+      items.forEach((item) => {
+        count += 1;
         const it = document.createElement("div");
         it.className = "help-item";
         const name = document.createElement("div");
@@ -920,20 +1292,60 @@
       });
       body.appendChild(g);
     });
+    if (!count) {
+      const message = document.createElement("p");
+      message.className = "empty";
+      message.textContent = "没有匹配参数。试试「图片」「超时」「冷却」，或清空搜索。";
+      body.appendChild(message);
+    }
   }
 
   function openHelp() {
     renderHelp();
-    el("helpModal").classList.add("show");
+    toggleDialog("helpModal", true);
   }
 
   function closeHelp() {
-    el("helpModal").classList.remove("show");
+    toggleDialog("helpModal", false);
+  }
+
+  const dialogOpeners = new Map();
+  function toggleDialog(id, open) {
+    const mask = el(id);
+    if (open) dialogOpeners.set(id, {
+      element: document.activeElement,
+      x: window.scrollX,
+      y: window.scrollY,
+      scrolls: Array.from(document.querySelectorAll("main .scroll")).map(element => ({
+        element, top: element.scrollTop, left: element.scrollLeft,
+      })),
+    });
+    mask.classList.toggle("show", open);
+    const anyOpen = !!document.querySelector(".modal-mask.show");
+    document.querySelector("main").inert = anyOpen;
+    el("saveBar").inert = anyOpen;
+    if (open) {
+      (mask.querySelector('input[type="search"]') || mask.querySelector(".modal-close")).focus({preventScroll:true});
+    } else {
+      const saved = dialogOpeners.get(id);
+      // 返回原按钮时不能触发自动滚动；原按钮消失也不退回页首的帮助按钮。
+      (saved?.element?.isConnected ? saved.element : document.querySelector("main .scroll"))
+        ?.focus({preventScroll:true});
+      if (saved) {
+        saved.scrolls.forEach(({element, top, left}) => {
+          if (element.isConnected) { element.scrollTop = top; element.scrollLeft = left; }
+        });
+        window.scrollTo({left:saved.x, top:saved.y, behavior:"instant"});
+      }
+      dialogOpeners.delete(id);
+    }
   }
 
   function discardChanges() {
     state.draft = {};
     state.dirty.clear();
+    state.mode = state.data.mode;
+    themeModeBadge(state.mode);
     el("dirtyMsg").textContent = "";
     hideSaveBar();
     renderModes();
@@ -958,8 +1370,12 @@
   }
 
   async function load(full) {
+    // 查看详情期间保持原列表及按钮，避免定时刷新使返回焦点跳到页面顶部。
+    if (!full && document.querySelector(".modal-mask.show")) return;
     try {
       const data = await apiGet("console/state");
+      // 请求可能在打开弹窗前发出，返回时也需要检查，避免替换用户正在看的记录。
+      if (!full && document.querySelector(".modal-mask.show")) return;
       if (full || !state.data) {
         applyState(data);
         return;
@@ -985,7 +1401,7 @@
       if (key === "gate_mode") return;
       const value = state.draft[key];
       if (value === null || value === undefined) return;
-      if (value === "" && key !== "classifier_provider_id") return;
+      if (value === "" && key !== "classifier_provider_id" && key !== "vision_provider_id") return;
       payload[key] = value;
     });
     if (!Object.keys(payload).length) {
@@ -1053,6 +1469,7 @@
   el("probeBtn").addEventListener("click", probe);
   el("resetBtn").addEventListener("click", reset);
   el("helpBtn").addEventListener("click", openHelp);
+  el("helpSearch").addEventListener("input", renderHelp);
   el("saveBarSave").addEventListener("click", save);
   el("saveBarDiscard").addEventListener("click", discardChanges);
   el("rawModalClose").addEventListener("click", closeRawModal);
@@ -1064,6 +1481,15 @@
     if (ev.target === el("helpModal")) closeHelp();
   });
   document.addEventListener("keydown", (ev) => {
+    const dialog = document.querySelector(".modal-mask.show .modal");
+    if (ev.key === "Tab" && dialog) {
+      const controls = Array.from(dialog.querySelectorAll('button, input, summary, [href], [tabindex="0"]'))
+        .filter(node => !node.disabled);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+      else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+      return;
+    }
     if (ev.key !== "Escape") return;
     if (el("rawModal").classList.contains("show")) closeRawModal();
     if (el("helpModal").classList.contains("show")) closeHelp();

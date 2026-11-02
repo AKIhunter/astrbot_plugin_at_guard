@@ -18,6 +18,10 @@ from typing import Any, Awaitable, Callable
 from astrbot.api import logger
 from astrbot.api.star import Context
 from astrbot.api.web import error_response, json_response, request
+try:
+    from .guard_media import image_target
+except ImportError:
+    from guard_media import image_target
 
 PLUGIN_NAME = "astrbot_plugin_at_guard"
 SCHEMA_PATH = Path(__file__).resolve().parent / "_conf_schema.json"
@@ -26,6 +30,10 @@ SCHEMA_PATH = Path(__file__).resolve().parent / "_conf_schema.json"
 NUMERIC_FIELDS: dict[str, tuple[str, float, float]] = {
     "participation_confidence_threshold": ("int", 0, 100),
     "classifier_timeout_seconds": ("float", 0.5, 8.0),
+    "vision_timeout_seconds": ("float", 0.5, 12),
+    "gate_main_fallback_timeout_seconds": ("float", 0.5, 12),
+    "gate_total_timeout_seconds": ("float", 1, 25),
+    "gate_vision_hourly_budget": ("int", 0, 120),
     "gate_min_length": ("int", 0, 20),
     "gate_hourly_budget": ("int", 0, 600),
     "gate_context_messages": ("int", 0, 30),
@@ -37,10 +45,11 @@ NUMERIC_FIELDS: dict[str, tuple[str, float, float]] = {
     "proactive_cooldown_seconds": ("float", 0, 60.0),
     "duplicate_window_seconds": ("int", 0, 3600),
 }
-BOOL_FIELDS = {"apply_to_private"}
+BOOL_FIELDS = {"apply_to_private", "gate_main_fallback_enabled"}
 STRING_FIELDS = {
     "gate_mode",
     "classifier_provider_id",
+    "vision_provider_id",
     "empty_mention_mode",
     "empty_mention_reply",
     "empty_mention_persona_prompt",
@@ -156,6 +165,11 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
                         names = []
 
             entry = items.get(provider_id)
+            try:
+                image_target(provider, provider_id)
+                vision_supported = True
+            except Exception:
+                vision_supported = False
             if entry is None:
                 items[provider_id] = {
                     "id": provider_id,
@@ -163,9 +177,11 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
                     "kind": kind,
                     "upstreams": names,
                     "instances": 1,
+                    "supports_images": vision_supported,
                 }
             else:
                 entry["instances"] += 1
+                entry["supports_images"] = entry.get("supports_images", False) or vision_supported
                 if kind == "router":
                     entry["kind"] = "router"
                 for name in names:
@@ -178,6 +194,11 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
                 if pinned_id in items:
                     continue
                 display = f"{label} → {upstream_model}" if label and label != upstream_model else upstream_model
+                try:
+                    image_target(provider, pinned_id)
+                    pinned_vision = True
+                except Exception:
+                    pinned_vision = False
                 items[pinned_id] = {
                     "id": pinned_id,
                     "model": upstream_model,
@@ -186,6 +207,7 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
                     "instances": 1,
                     "parent": provider_id,
                     "display": display,
+                    "supports_images": pinned_vision,
                 }
     except Exception as exc:
         logger.debug(f"[智能过滤] 读取模型列表失败: {exc!r}")
@@ -291,11 +313,16 @@ async def handle_config(plugin: Any):
         except ValueError as exc:
             return _failure(str(exc))
 
-    provider_id = updates.get("classifier_provider_id")
-    if provider_id:
-        known = {item["id"] for item in await _providers(plugin)}
-        if provider_id not in known:
+    providers = await _providers(plugin)
+    known = {item["id"] for item in providers}
+    for key in ("classifier_provider_id", "vision_provider_id"):
+        provider_id = updates.get(key)
+        if provider_id and provider_id not in known:
             return _failure(f"模型 {provider_id} 不在可用列表中")
+        if key == "vision_provider_id" and provider_id and not any(
+            item["id"] == provider_id and item.get("supports_images") for item in providers
+        ):
+            return _failure(f"模型 {provider_id} 无法确认支持图片，请选择视觉模型")
 
     for key, value in updates.items():
         try:
@@ -422,10 +449,11 @@ async def _refresh_provider_schema(plugin: Any) -> None:
         last_options = options
         if attempt < 5:
             await asyncio.sleep(3.0)
-    _write_schema_options(plugin, last_options)
+    _write_schema_options(plugin, last_options,
+                          [item["id"] for item in providers if item.get("supports_images")])
 
 
-def _write_schema_options(plugin: Any, options: list[str]) -> None:
+def _write_schema_options(plugin: Any, options: list[str], vision_options: list[str] | None = None) -> None:
     try:
         metadata = plugin.context.get_registered_star(PLUGIN_NAME)
         config = getattr(metadata, "config", None)
@@ -433,13 +461,10 @@ def _write_schema_options(plugin: Any, options: list[str]) -> None:
         if not isinstance(schema, dict):
             logger.warning("[智能过滤] 未找到插件配置 schema，判定模型下拉未注入")
             return
-        field = schema.get("classifier_provider_id")
-        if not isinstance(field, dict):
-            logger.warning("[智能过滤] schema 缺少 classifier_provider_id 字段")
-            return
-        # 首项放空串代表「跟随会话当前模型」，与 default="" 对齐，避免下拉
-        # 里没有默认值导致宿主前端显示异常。
-        field["options"] = [""] + options
+        for key in ("classifier_provider_id", "vision_provider_id"):
+            field = schema.get(key)
+            if isinstance(field, dict):
+                field["options"] = [""] + (options if key == "classifier_provider_id" else (vision_options or []))
         logger.info(
             f"[智能过滤] 已把 {len(options)} 个判定模型写入配置 schema 下拉："
             f"{', '.join(options)}"

@@ -14,8 +14,9 @@
 合成回归测试通过不能证明真实群聊的语义准确率；调整判定模型或提示词时仍需检查实际案例。
 
 不要提交 `data/`、判定日志、历史聊天评估文件、用户配置或凭据。
-`.gitignore` 保留相应保护规则。核心运行代码与迁移前版本逐文件一致，
-`docs/migration-manifest.json` 记录旧总库提交及原哈希。
+`.gitignore` 保留相应保护规则。`docs/migration-manifest.json` 记录迁移当时的旧总库提交及
+原哈希，不代表后续维护版本仍与旧版一致。当前代码已包含图片摘要、独立视觉候选、
+可读判定详情与滚动位置修复；完整说明见 `docs/current-features.md`。
 
 原市场条目：
 https://cloud.astrbot.app/plugin/AKIhunter/astrbot_plugin_at_guard

@@ -39,6 +39,42 @@
     },
     "hint": "超时按静默处理（fail-closed），因为放过一条无关消息会在群里刷屏。实测热态 p50≈1.3s，但空闲后首包会摸到 2.5s 以上，低于 3s 会开始丢正常消息。"
   },
+  "vision_provider_id": {
+    "description": "需要看图时的多模态小模型",
+    "type": "string",
+    "default": "",
+    "hint": "文字层需要看图时调用，同时返回图片摘要和不确定点供回复参考。仅列出可确认图片能力的候选；摘要不足时仍需原图。留空按主模型兜底开关处理。"
+  },
+  "vision_timeout_seconds": {
+    "description": "多模态判定超时（秒）",
+    "type": "float",
+    "default": 6,
+    "hint": "范围0.5-12秒。超时或返回格式异常才兜底；正常静默不会继续调用主模型。"
+  },
+  "gate_main_fallback_enabled": {
+    "description": "多模态异常时使用会话主模型兜底",
+    "type": "bool",
+    "default": true,
+    "hint": "只做参与判断，不发送消息。校验当前会话模型的图片能力，不支持时保持静默；不重复调用同一个失败模型。"
+  },
+  "gate_main_fallback_timeout_seconds": {
+    "description": "主模型兜底超时（秒）",
+    "type": "float",
+    "default": 6,
+    "hint": "范围0.5-12秒。兜底一次，仍异常或看不懂则静默。"
+  },
+  "gate_total_timeout_seconds": {
+    "description": "整条判定链路最长时间（秒）",
+    "type": "float",
+    "default": 18,
+    "hint": "范围1-25秒，包含文字、看图、兜底、记忆检索及模型解析。碎片等待和最终回复生成另受回复机会有效期约束。"
+  },
+  "gate_vision_hourly_budget": {
+    "description": "每群每小时视觉和主模型判定上限",
+    "type": "int",
+    "default": 20,
+    "hint": "范围0-120，视觉层及兜底共用，同时计入总判定上限；耗尽则静默。0=不限制此独立预算。"
+  },
   "gate_context_messages": {
     "description": "判定参考的流水条数",
     "type": "int",
@@ -59,7 +95,7 @@
       "max": 20,
       "step": 1
     },
-    "hint": "归一化（去表情、去语气词）后短于这个长度直接静默，不调用模型。设为 0 关闭该规则。"
+    "hint": "归一化（去表情、去语气词）后短于这个长度直接静默，不调用模型。有可用图片的消息交给文字层判断是否需要看图，不因缺少文字直接丢弃。设为 0 关闭该规则。"
   },
   "gate_context_max_age_seconds": {
     "description": "上下文最长保留时间（秒）",
