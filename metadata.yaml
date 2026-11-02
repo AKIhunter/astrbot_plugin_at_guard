@@ -1,0 +1,7 @@
+name: astrbot_plugin_at_guard
+display_name: 智能过滤插件
+desc: 以可调的 0-100 置信度判断机器人是否应参与聊天；小模型只输出 JSON，低分在生成前直接拦截（不浪费主模型 token），支持硬闸门/观察/旧行为/解耦四种模式、判定留痕与内置控制台。
+author: WorkBuddy
+repo: https://github.com/AKIhunter/astrbot_plugin_at_guard
+version: 2.7.0
+astrbot_version: ">=4.29.1"

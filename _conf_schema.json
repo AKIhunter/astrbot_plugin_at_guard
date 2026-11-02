@@ -1,0 +1,174 @@
+{
+  "gate_mode": {
+    "description": "闸门模式（总开关）",
+    "type": "string",
+    "default": "enforce",
+    "options": [
+      "enforce",
+      "shadow",
+      "legacy",
+      "off"
+    ],
+    "hint": "enforce=判完就拦，低于阈值的消息不调用主模型；shadow=只判定记录不拦截，用来校准阈值；legacy=旧行为（先生成再丢弃）；off=插件完全解耦，等同未挂载。"
+  },
+  "participation_confidence_threshold": {
+    "description": "普通群消息参与判断",
+    "type": "int",
+    "default": 65,
+    "slider": {
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    "hint": "分数只表示此刻参与的适合度。达到阈值、understood=true、act=reply 且没有停口/互聊等否决原因时才放行。阈值0也不会越过上下文约束；换评分协议或模型需重新标定。"
+  },
+  "classifier_provider_id": {
+    "description": "判定用的小模型",
+    "type": "string",
+    "default": "",
+    "hint": "从下拉里选择判定用的小模型（含「多 API 模型路由」等插件注册的 provider）。留空=跟随会话当前模型，切换会话模型时判定成本会跟着变，建议钉死一个小模型。"
+  },
+  "classifier_timeout_seconds": {
+    "description": "判定超时（秒）",
+    "type": "float",
+    "default": 3.5,
+    "slider": {
+      "min": 0.5,
+      "max": 8,
+      "step": 0.1
+    },
+    "hint": "超时按静默处理（fail-closed），因为放过一条无关消息会在群里刷屏。实测热态 p50≈1.3s，但空闲后首包会摸到 2.5s 以上，低于 3s 会开始丢正常消息。"
+  },
+  "gate_context_messages": {
+    "description": "判定参考的流水条数",
+    "type": "int",
+    "default": 8,
+    "slider": {
+      "min": 0,
+      "max": 30,
+      "step": 1
+    },
+    "hint": "只送给判定小模型的最近消息条数（含机器人自己的发言）。比主模型那档更省，8 条通常够判断话题归属。"
+  },
+  "gate_min_length": {
+    "description": "最短参与长度（字）",
+    "type": "int",
+    "default": 2,
+    "slider": {
+      "min": 0,
+      "max": 20,
+      "step": 1
+    },
+    "hint": "归一化（去表情、去语气词）后短于这个长度直接静默，不调用模型。设为 0 关闭该规则。"
+  },
+  "gate_context_max_age_seconds": {
+    "description": "上下文最长保留时间（秒）",
+    "type": "float",
+    "default": 300,
+    "hint": "只使用此时间内的群流水和机器人上一句，防止把旧话题当成当前话题。范围30-3600秒。"
+  },
+  "gate_reply_max_age_seconds": {
+    "description": "自主回复机会有效期（秒）",
+    "type": "float",
+    "default": 30,
+    "hint": "等待、判定、生成超过此时间则取消自主回复。判定或生成期间有新群消息也取消旧回复；显式呼叫不受此限制。范围5-120秒。"
+  },
+  "gate_memory_timeout_seconds": {
+    "description": "背景记忆检索超时（秒）",
+    "type": "float",
+    "default": 1.5,
+    "hint": "ground=memory 时按当前完整会话和人格检索最多3条；成功后最多复判一次。无记忆、身份不明或超时则静默。范围0.2-5秒。"
+  },
+  "gate_hourly_budget": {
+    "description": "每群每小时判定上限",
+    "type": "int",
+    "default": 60,
+    "slider": {
+      "min": 0,
+      "max": 600,
+      "step": 10
+    },
+    "hint": "防止深夜刷屏把判定预算烧穿；超出后直接静默，不调用模型。0=不限制。"
+  },
+  "bot_names": {
+    "description": "机器人称呼",
+    "type": "list",
+    "default": [
+      "恰比姐",
+      "恰比"
+    ],
+    "hint": "群消息以其中任一称呼开头时，视为明确叫机器人。"
+  },
+  "empty_mention_mode": {
+    "description": "仅 @机器人时的回复方式",
+    "type": "string",
+    "default": "fixed",
+    "options": [
+      "fixed",
+      "persona"
+    ],
+    "hint": "fixed=直接发送下方固定文案，不调用模型；persona=调用当前会话的模型，并自动沿用该会话在 AstrBot 中选择的人格。"
+  },
+  "empty_mention_reply": {
+    "description": "仅 @机器人时的固定文案",
+    "type": "string",
+    "default": "嗯？有事就说。",
+    "hint": "仅在回复方式为 fixed 时生效。"
+  },
+  "empty_mention_persona_prompt": {
+    "description": "仅 @机器人时的人格回复要求",
+    "type": "text",
+    "default": "群友刚才只@了你，没有附带其他内容。请严格沿用当前会话已经选择的AstrBot人格，用符合该人格身份、关系、语气和说话习惯的一句简短自然话回应。不要解释任务，不要提到AI、系统、人设或提示词，也不要替用户虚构意图。",
+    "hint": "仅在回复方式为 persona 时生效。插件不固定人格 ID；AstrBot 会按当前会话选择的人格生成，因此不同会话可有不同回复方式。"
+  },
+  "apply_to_private": {
+    "description": "是否作用于私聊",
+    "type": "bool",
+    "default": false,
+    "hint": "关闭时插件完全跳过私聊请求和响应；开启后私聊也使用参与置信度阈值。默认关闭。"
+  },
+  "participation_context_messages": {
+    "description": "参与回复的上下文条数",
+    "type": "int",
+    "default": 12,
+    "slider": {
+      "min": 2,
+      "max": 30,
+      "step": 1
+    },
+    "hint": "放行后额外塞给主模型的最近群聊消息数（判定用的条数在上面单独配置）；仅用于理解话题，聊天内容不会被当作指令。"
+  },
+  "fragment_wait_seconds": {
+    "description": "碎片消息等待时间（秒）",
+    "type": "float",
+    "default": 1.2,
+    "slider": {
+      "min": 0,
+      "max": 5,
+      "step": 0.1
+    },
+    "hint": "普通主动回复请求短暂等待，以收集紧随其后的群消息。明确 @机器人、引用机器人或叫机器人名字时不等待。这段等待会叠加在回复延迟上。"
+  },
+  "proactive_cooldown_seconds": {
+    "description": "主动回复冷却（秒）",
+    "type": "float",
+    "default": 8,
+    "slider": {
+      "min": 0,
+      "max": 60,
+      "step": 1
+    },
+    "hint": "避免多人连续发送碎片消息时机器人连续抢话。"
+  },
+  "duplicate_window_seconds": {
+    "description": "相同消息去重窗口（秒）",
+    "type": "int",
+    "default": 120,
+    "slider": {
+      "min": 0,
+      "max": 600,
+      "step": 10
+    },
+    "hint": "同一群内完全相同的消息在此时间内只回复一次；设为 0 关闭。"
+  }
+}

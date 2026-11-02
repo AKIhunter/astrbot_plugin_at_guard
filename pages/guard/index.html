@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>智能过滤控制台</title>
+<style>
+  :root {
+    --bg: #f7f7f8;
+    --panel: #ffffff;
+    --line: #e4e4e7;
+    --line-soft: #f0f0f1;
+    --text: #18181b;
+    --muted: #71717a;
+    --accent: #2563eb;
+    --accent-soft: #eff4ff;
+    --ok: #15803d;
+    --ok-soft: #ecfdf3;
+    --warn: #b45309;
+    --warn-soft: #fff8ec;
+    --bad: #b91c1c;
+    --bad-soft: #fef2f2;
+    --bar: #d4d4d8;
+    --radius: 10px;
+  }
+  html[data-theme="dark"] {
+    --bg: #16161a;
+    --panel: #1d1d22;
+    --line: #2e2e35;
+    --line-soft: #26262c;
+    --text: #ececf1;
+    --muted: #9a9aa5;
+    --accent: #6ea8fe;
+    --accent-soft: #1b2740;
+    --ok: #6ee7a8;
+    --ok-soft: #14261c;
+    --warn: #f5c26b;
+    --warn-soft: #2a2113;
+    --bad: #f4948e;
+    --bad-soft: #2b1717;
+    --bar: #3a3a43;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 18px 18px 40px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .head h1 { font-size: 16px; font-weight: 600; margin: 0; }
+  .head .ver { color: var(--muted); font-size: 12px; }
+  .head .spacer { flex: 1; }
+  .badge {
+    font-size: 12px; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .badge.on { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+  .badge.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+  .badge.off { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+  .grid { display: grid; gap: 14px; }
+  .cols-2 { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); }
+  @media (max-width: 880px) { .cols-2 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 14px 16px;
+  }
+  .card h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  .card .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  .card-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .card-head-row h2 { margin: 0; }
+  .card-head-row input {
+    flex: 0 1 260px; min-width: 160px; padding: 6px 10px; font-size: 12px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--bg); color: var(--text);
+  }
+  .card-head-row input:focus { outline: none; border-color: var(--accent); }
+  .modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .mode {
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 11px;
+    cursor: pointer; background: transparent; color: inherit; text-align: left;
+    font-family: inherit; font-size: 13px; transition: border-color .12s, background .12s;
+  }
+  .mode:hover { border-color: var(--accent); }
+  .mode.active { border-color: var(--accent); background: var(--accent-soft); }
+  .mode b { display: block; font-weight: 600; margin-bottom: 2px; }
+  .mode span { color: var(--muted); font-size: 11.5px; line-height: 1.45; display: block; }
+  .row { display: grid; grid-template-columns: 118px minmax(0, 1fr) 74px; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+  .row:last-child { border-bottom: 0; }
+  .row > label { color: var(--muted); font-size: 12.5px; }
+  .row .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+  .row.wide { grid-template-columns: 118px minmax(0, 1fr); }
+  .row.wide .val { display: none; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  input[type="number"], input[type="text"], select, textarea {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); color: var(--text); font-family: inherit; font-size: 12.5px;
+  }
+  textarea { resize: vertical; min-height: 58px; }
+  .switch { display: flex; align-items: center; gap: 8px; }
+  .switch input { width: 16px; height: 16px; accent-color: var(--accent); }
+  .actions { display: flex; gap: 8px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+  button.btn {
+    padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); cursor: pointer;
+    font-family: inherit; font-size: 12.5px;
+  }
+  button.btn:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { opacity: .9; color: #fff; }
+  button.danger { color: var(--bad); border-color: var(--bad); }
+  .msg { font-size: 12px; color: var(--muted); }
+  .msg.err { color: var(--bad); }
+  .msg.ok { color: var(--ok); }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .stat { border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; background: var(--bg); }
+  .stat em { display: block; font-style: normal; color: var(--muted); font-size: 11.5px; }
+  .stat strong { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat small { color: var(--muted); font-size: 11px; }
+  .hist { display: flex; align-items: flex-end; gap: 6px; height: 104px; padding: 6px 0 0; border-bottom: 1px solid var(--line); }
+  .hist .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+  .hist .bar { width: 100%; border-radius: 3px 3px 0 0; background: var(--bar); min-height: 2px; }
+  .hist .bar.pass { background: var(--accent); }
+  .hist .num { font-size: 10.5px; color: var(--muted); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+  .axis { display: flex; gap: 6px; margin-top: 4px; }
+  .axis span { flex: 1; text-align: center; font-size: 10.5px; color: var(--muted); }
+  .kv { display: flex; gap: 16px; flex-wrap: wrap; font-variant-numeric: tabular-nums; margin-top: 10px; }
+  .kv span { color: var(--muted); font-size: 12px; }
+  .kv b { color: var(--text); font-weight: 600; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .chip {
+    border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px;
+    background: transparent; color: var(--text); cursor: pointer; font-size: 12px;
+    font-family: inherit;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 11.5px; }
+  td.raw { white-space: normal; color: var(--muted); max-width: 250px; overflow: hidden; text-overflow: ellipsis; }
+  .pill { padding: 1px 7px; border-radius: 999px; font-size: 11.5px; border: 1px solid var(--line); }
+  .pill.reply { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+  .pill.silence { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+  .empty { color: var(--muted); font-size: 12px; padding: 12px 0; }
+  .probe { display: grid; gap: 8px; }
+  .probe-out { margin-top: 4px; border: 1px dashed var(--line); border-radius: 8px; padding: 10px 12px; display: none; }
+  .probe-out.show { display: block; }
+  .scroll { max-height: 340px; overflow: auto; }
+  .hintline { font-size: 11.5px; color: var(--muted); padding-top: 4px; }
+  .hintline.warn { color: var(--warn); }
+  .raw-cell { display: inline-flex; align-items: center; gap: 6px; max-width: 250px; }
+  .raw-cell .raw-text { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .raw-cell .raw-open {
+    flex: none; border: 1px solid var(--line); border-radius: 6px; background: transparent;
+    color: var(--accent); cursor: pointer; font-size: 11px; padding: 1px 7px; font-family: inherit;
+  }
+  .raw-cell .raw-open:hover { border-color: var(--accent); }
+  .modal-mask {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000;
+    display: none; align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    width: min(720px, 100%); max-height: 80vh; display: flex; flex-direction: column;
+    box-shadow: 0 12px 40px rgba(0,0,0,.3);
+  }
+  .modal .modal-head {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .modal .modal-head h3 { margin: 0; font-size: 13px; font-weight: 600; }
+  .modal .modal-head .spacer { flex: 1; }
+  .modal .modal-close {
+    border: 1px solid var(--line); border-radius: 6px; background: transparent;
+    color: var(--muted); cursor: pointer; font-size: 12px; padding: 2px 9px; font-family: inherit;
+  }
+  .modal .modal-close:hover { color: var(--text); border-color: var(--muted); }
+  .modal .modal-body {
+    padding: 14px 16px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 12.5px; line-height: 1.6; color: var(--text);
+  }
+  .modal .modal-sec {
+    font-size: 11.5px; font-weight: 600; color: var(--muted);
+    margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--line-soft);
+  }
+  .modal .modal-sec:first-child { margin-top: 0; }
+  .modal .modal-sec-body {
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .modal .modal-sec-body.mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 12px; line-height: 1.55;
+  }
+  .modal-help { width: min(760px, 100%); }
+  .help-group { margin-bottom: 14px; }
+  .help-group:last-child { margin-bottom: 0; }
+  .help-group h4 {
+    font-size: 13px; font-weight: 600; margin: 0 0 8px; color: var(--text);
+    padding-bottom: 5px; border-bottom: 1px solid var(--line);
+  }
+  .help-item { margin-bottom: 12px; }
+  .help-item .help-name { font-weight: 600; color: var(--text); font-size: 12.5px; }
+  .help-item .help-name .help-key { color: var(--accent); font-family: ui-monospace, Consolas, monospace; font-size: 11px; margin-left: 4px; }
+  .help-item .help-desc { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 2px; }
+  .help-item .help-ex {
+    margin-top: 5px; font-size: 11.5px; line-height: 1.55; color: var(--text);
+    background: var(--bg); border: 1px solid var(--line-soft); border-radius: 6px; padding: 6px 9px;
+  }
+  .help-item .help-ex b { color: var(--accent); }
+  .save-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px; background: var(--panel);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -6px 24px rgba(0,0,0,.18);
+    transform: translateY(100%); opacity: 0; pointer-events: none;
+    transition: transform .22s ease, opacity .22s ease;
+  }
+  .save-bar.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
+  .save-bar .save-bar-text { flex: 1; font-size: 13px; color: var(--text); }
+  .save-bar .save-bar-text b { color: var(--accent); }
+  .save-bar button {
+    padding: 7px 16px; border-radius: 8px; cursor: pointer;
+    font-family: inherit; font-size: 12.5px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text);
+  }
+  .save-bar button:hover { border-color: var(--accent); color: var(--accent); }
+  .save-bar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .save-bar button.primary:hover { opacity: .9; color: #fff; }
+  .save-bar button.danger { color: var(--bad); border-color: var(--bad); }
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>智能过滤控制台</h1>
+  <span class="ver" id="ver">v—</span>
+  <span class="badge" id="modeBadge">加载中</span>
+  <span class="spacer"></span>
+  <span class="msg" id="dirtyMsg"></span>
+  <button class="btn" id="helpBtn" title="查看每个配置项的作用与示例">❓ 帮助手册</button>
+  <button class="btn primary" id="saveBtn">保存参数</button>
+  <span class="msg" id="saveMsg"></span>
+</div>
+
+<div class="grid cols-2">
+  <section class="card">
+    <h2>闸门模式</h2>
+    <p class="sub">总开关。改完点右上角保存立即生效，不需要重载插件。</p>
+    <div class="modes" id="modes"></div>
+  </section>
+
+  <section class="card">
+    <h2>今日运行</h2>
+    <p class="sub" id="todaySub">—</p>
+    <div class="stats" id="stats"></div>
+    <div class="actions">
+      <button class="btn danger" id="resetBtn">清零统计</button>
+      <span class="msg" id="resetMsg"></span>
+    </div>
+  </section>
+</div>
+
+<section class="card" style="margin-top:14px">
+  <h2>分数分布与阈值扫描</h2>
+  <p class="sub" id="distSub">参与适合度分布；蓝色仅表示分数达标，放行还要求理解上下文且没有否决原因。</p>
+  <div class="hist" id="hist"></div>
+  <div class="axis" id="axis"></div>
+  <div class="kv" id="distKv"></div>
+  <div class="chips" id="chips"></div>
+</section>
+
+<div class="grid cols-2" style="margin-top:14px">
+  <section class="card">
+    <h2>判定参数</h2>
+    <p class="sub">分数达标、理解上下文且没有否决原因才放行。</p>
+    <div id="gateFields"></div>
+  </section>
+
+  <section class="card">
+    <h2>试跑一条</h2>
+    <p class="sub">不写统计、不占预算，用来验证阈值和小模型口径是否一致。</p>
+    <div class="probe">
+      <textarea id="probeText" placeholder="粘贴一条群消息，例如：这个门派怎么加点"></textarea>
+      <input id="probeBot" type="text" placeholder="（可选）机器人上一句说了什么" />
+      <div class="actions" style="margin-top:0">
+        <button class="btn primary" id="probeBtn">判定一下</button>
+        <span class="msg" id="probeMsg"></span>
+      </div>
+      <div class="probe-out" id="probeOut"></div>
+    </div>
+  </section>
+</div>
+
+<div class="grid cols-2" style="margin-top:14px">
+  <section class="card">
+    <h2>回复与防刷屏</h2>
+    <p class="sub">这几项直接决定机器人说话的手感和延迟。</p>
+    <div id="replyFields"></div>
+  </section>
+
+  <section class="card">
+    <h2>称呼与 @ 回复</h2>
+    <p class="sub">机器人称呼会被注册成唤醒词，以它开头的消息直接视为叫它。</p>
+    <div id="mentionFields"></div>
+  </section>
+</div>
+
+<section class="card" style="margin-top:14px">
+  <div class="card-head-row">
+    <h2>最近判定</h2>
+    <input id="decisionSearch" type="text" placeholder="🔍 搜索模型原话 / 上下文…" autocomplete="off" />
+  </div>
+  <p class="sub">分数是参与适合度；修正时显示原始分数。gen_skipped=true 表示闸门已拦截、未调用主模型，原因可能是低分、互聊、结束话题或背景不足。发送阶段取消单独记录。</p>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>时间</th><th>群</th><th>分数</th><th>阈值</th><th>决定</th><th>原因</th><th>耗时</th><th>模型原话</th></tr>
+      </thead>
+      <tbody id="decisions"><tr><td colspan="8" class="empty">暂无记录</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<div class="modal-mask" id="rawModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="rawModalTitle">模型原话</h3>
+      <span class="spacer"></span>
+      <button class="modal-close" id="rawModalClose">关闭</button>
+    </div>
+    <div class="modal-body" id="rawModalBody"></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="helpModal">
+  <div class="modal modal-help">
+    <div class="modal-head">
+      <h3>配置项帮助手册</h3>
+      <span class="spacer"></span>
+      <button class="modal-close" id="helpModalClose">关闭</button>
+    </div>
+    <div class="modal-body" id="helpModalBody"></div>
+  </div>
+</div>
+
+<div class="save-bar" id="saveBar">
+  <span class="save-bar-text" id="saveBarText">有改动未保存</span>
+  <button class="danger" id="saveBarDiscard">放弃更改</button>
+  <button class="primary" id="saveBarSave">保存更新</button>
+</div>
+
+<script>
+(function () {
+  // bridge 由宿主注入在 body 末尾、即本内联脚本之后，所以不能在这里立即
+  // 取值（会拿到 undefined）。用 getter 动态解析，boot 里等 DOM 就绪后再用。
+  let bridge = null;
+  const resolveBridge = () => (window.AstrBotPluginView || window.AstrBotPluginPage || null);
+  const el = (id) => document.getElementById(id);
+  const state = { data: null, mode: "enforce", draft: {}, dirty: new Set(), q: "" };
+
+  function detectTheme() {
+    try {
+      const parentDoc = window.parent && window.parent.document;
+      const cls = (parentDoc.documentElement.className || "") + " " + (parentDoc.body ? parentDoc.body.className : "");
+      if (/\bdark\b/.test(cls)) return "dark";
+      const bg = parentDoc.body && getComputedStyle(parentDoc.body).backgroundColor;
+      const m = bg && bg.match(/^rgb\((\d+), (\d+), (\d+)/);
+      if (m) {
+        const lum = (Number(m[1]) * 299 + Number(m[2]) * 587 + Number(m[3]) * 114) / 1000;
+        return lum < 128 ? "dark" : "light";
+      }
+    } catch (e) { /* 跨域时忽略 */ }
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  document.documentElement.setAttribute("data-theme", detectTheme());
+
+  function unwrap(result) {
+    if (result && result.status === "ok" && Object.prototype.hasOwnProperty.call(result, "data")) return result.data;
+    if (result && result.status === "error") throw new Error(result.message || "请求失败");
+    return (result && result.data) || result || {};
+  }
+  const apiGet = async (path, params) => unwrap(await resolveBridge().apiGet(path, params || {}));
+  const apiPost = async (path, body) => unwrap(await resolveBridge().apiPost(path, body || {}));
+
+  const fmtTime = (ts) => {
+    const d = new Date(ts * 1000);
+    const p = (n) => String(n).padStart(2, "0");
+    return p(d.getMonth() + 1) + "/" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+  };
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const REASON_LABEL = {
+    allowed: "放行",
+    below_threshold: "分数不足",
+    model_silent: "模型判定别插嘴",
+    others_talking: "群友互聊",
+    conversation_ended: "话题已结束",
+    already_answered: "已经有人回答",
+    context_missing: "背景或指代不明",
+    media_unresolved: "媒体内容未理解",
+    no_value: "没有具体贡献",
+    context_changed: "群聊已更新，取消旧回复",
+    message_expired: "回复机会已过期",
+    no_reply: "主模型选择静默",
+    too_short: "太短",
+    no_content: "无有效文字",
+    budget: "超出每小时预算",
+    timeout: "判定超时",
+    parse_error: "输出无法解析",
+    error: "调用异常",
+    no_provider: "没有可用模型",
+  };
+  const MODE_HINT = {
+    enforce: "硬闸门：低分直接拦截，主模型不会被调用",
+    shadow: "观察模式：只记录不拦截，用来校准阈值",
+    legacy: "旧行为：先生成再丢弃，仅回滚时用",
+    off: "完全解耦：插件不介入任何消息",
+  };
+
+  const GATE_FIELDS = [
+    { key: "participation_confidence_threshold", label: "参与阈值", type: "range", min: 0, max: 100, step: 1 },
+    { key: "classifier_provider_id", label: "判定模型", type: "provider" },
+    { key: "classifier_timeout_seconds", label: "判定超时(s)", type: "number", min: 0.5, max: 8, step: 0.1 },
+    { key: "gate_context_messages", label: "判定流水条数", type: "number", min: 0, max: 30, step: 1 },
+    { key: "gate_context_max_age_seconds", label: "上下文有效期(s)", type: "number", min: 30, max: 3600, step: 30 },
+    { key: "gate_memory_timeout_seconds", label: "记忆检索超时(s)", type: "number", min: 0.2, max: 5, step: 0.1 },
+    { key: "gate_min_length", label: "最短参与字数", type: "number", min: 0, max: 20, step: 1 },
+    { key: "gate_hourly_budget", label: "每小时判定上限", type: "number", min: 0, max: 600, step: 10 },
+  ];
+  const REPLY_FIELDS = [
+    { key: "gate_reply_max_age_seconds", label: "回复机会有效期(s)", type: "number", min: 5, max: 120, step: 1 },
+    { key: "participation_context_messages", label: "回复上下文条数", type: "number", min: 2, max: 30, step: 1 },
+    { key: "fragment_wait_seconds", label: "碎片等待(s)", type: "number", min: 0, max: 5, step: 0.1 },
+    { key: "proactive_cooldown_seconds", label: "主动冷却(s)", type: "number", min: 0, max: 60, step: 1 },
+    { key: "duplicate_window_seconds", label: "去重窗口(s)", type: "number", min: 0, max: 3600, step: 10 },
+    { key: "apply_to_private", label: "作用于私聊", type: "bool" },
+  ];
+  const MENTION_FIELDS = [
+    { key: "bot_names", label: "机器人称呼", type: "list", placeholder: "恰比姐, 恰比" },
+    { key: "empty_mention_mode", label: "@ 回复方式", type: "select", options: [["fixed", "固定文案（不调模型）"], ["persona", "按人格生成"]] },
+    { key: "empty_mention_reply", label: "@ 固定文案", type: "text", placeholder: "嗯？有事就说。" },
+    { key: "empty_mention_persona_prompt", label: "@ 人格要求", type: "textarea" },
+  ];
+
+  function themeModeBadge(mode) {
+    const badge = el("modeBadge");
+    badge.textContent = { enforce: "硬闸门", shadow: "观察中", legacy: "旧行为", off: "已解耦" }[mode] || mode;
+    badge.className = "badge " + (mode === "enforce" ? "on" : mode === "shadow" ? "warn" : "off");
+  }
+
+  function setDirty(key, value) {
+    state.draft[key] = value;
+    state.dirty.add(key);
+    el("dirtyMsg").textContent = "有 " + state.dirty.size + " 项未保存";
+    el("dirtyMsg").className = "msg";
+    showSaveBar();
+  }
+
+  function showSaveBar() {
+    const n = state.dirty.size;
+    el("saveBarText").innerHTML = n
+      ? "有 <b>" + n + "</b> 项更改未保存"
+      : "有更改未保存";
+    el("saveBar").classList.add("show");
+  }
+
+  function hideSaveBar() {
+    el("saveBar").classList.remove("show");
+  }
+
+  function renderModes() {
+    const host = el("modes");
+    host.innerHTML = "";
+    ["enforce", "shadow", "legacy", "off"].forEach((mode) => {
+      const btn = document.createElement("button");
+      btn.className = "mode" + (state.mode === mode ? " active" : "");
+      btn.innerHTML = "<b>" + esc((state.data.modeLabels || {})[mode] || mode) + "</b><span>" + esc(MODE_HINT[mode]) + "</span>";
+      btn.addEventListener("click", () => {
+        state.mode = mode;
+        setDirty("gate_mode", mode);
+        renderModes();
+        themeModeBadge(mode);
+      });
+      host.appendChild(btn);
+    });
+  }
+
+  function providerHint(value) {
+    const providers = (state.data.providers || []);
+    const found = providers.find((p) => p.id === value);
+    if (!found) return "跟随会话当前模型：换会话模型时判定成本会跟着变。";
+    const bits = [];
+    if (found.kind === "router_upstream") {
+      // 锁定路由下的具体上游模型：跳过自动降级，直连该模型。
+      bits.push("已锁定具体上游模型 " + (found.model || found.display || ""));
+      if (found.parent) bits.push("所属路由 " + found.parent);
+      bits.push("该模型不可用时不再降级到其它上游");
+      return bits.join("；");
+    }
+    if (found.model) bits.push("模型 " + found.model);
+    const list = found.upstreams || [];
+    if (list.length) {
+      // 路由的上游是「优先级链」，原生 provider 的只是「它家可选模型」，别混为一谈。
+      const label = found.kind === "router" ? "路由上游 " : "可选模型 ";
+      bits.push(label + list.length + " 个：" + list.join(" / "));
+      if (found.kind === "router") {
+        bits.push("上游按优先级自动降级；下拉里「└ 具体模型」可锁定其中某一个");
+      }
+    }
+    if (found.instances > 1) bits.push("同名实例 " + found.instances + " 个");
+    return bits.join("；") || "";
+  }
+
+  function buildField(field, value, host) {
+    const wide = field.type === "textarea" || field.type === "list" || field.type === "text";
+    const row = document.createElement("div");
+    row.className = "row" + (wide ? " wide" : "");
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    const cell = document.createElement("div");
+    const out = document.createElement("div");
+    out.className = "val";
+
+    if (field.type === "range") {
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = field.min; input.max = field.max; input.step = field.step;
+      input.value = Number(value || 0);
+      out.textContent = input.value;
+      input.addEventListener("input", () => {
+        out.textContent = input.value;
+        setDirty(field.key, Number(input.value));
+        renderDistribution();
+      });
+      cell.appendChild(input);
+    } else if (field.type === "number") {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = field.min; input.max = field.max; input.step = field.step;
+      input.value = value == null ? "" : value;
+      input.addEventListener("input", () => {
+        setDirty(field.key, input.value === "" ? null : Number(input.value));
+      });
+      cell.appendChild(input);
+    } else if (field.type === "text" || field.type === "list") {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = field.type === "list"
+        ? (Array.isArray(value) ? value.join("，") : (value || ""))
+        : (value == null ? "" : value);
+      input.placeholder = field.placeholder || "";
+      input.addEventListener("input", () => setDirty(field.key, input.value));
+      cell.appendChild(input);
+    } else if (field.type === "textarea") {
+      const area = document.createElement("textarea");
+      area.value = value == null ? "" : value;
+      area.addEventListener("input", () => setDirty(field.key, area.value));
+      cell.appendChild(area);
+    } else if (field.type === "select") {
+      const select = document.createElement("select");
+      (field.options || []).forEach(([val, text]) => {
+        const opt = document.createElement("option");
+        opt.value = val; opt.textContent = text;
+        select.appendChild(opt);
+      });
+      select.value = value || "";
+      select.addEventListener("change", () => setDirty(field.key, select.value));
+      cell.appendChild(select);
+    } else if (field.type === "provider") {
+      const select = document.createElement("select");
+      const follow = document.createElement("option");
+      follow.value = "";
+      follow.textContent = "跟随会话当前模型（不推荐）";
+      select.appendChild(follow);
+      (state.data.providers || []).forEach((p) => {
+        const opt = document.createElement("option");
+        if (p.kind === "router_upstream") {
+          // 路由下的具体上游模型：锁定后跳过优先级自动降级，直连该模型。
+          opt.value = p.id;
+          opt.textContent = "　└ " + (p.display || p.model || p.id) + "（锁定上游）";
+        } else {
+          const tail = p.model ? " · " + p.model : "";
+          const n = (p.upstreams && p.upstreams.length) || 0;
+          const extra = n
+            ? (p.kind === "router" ? " · 路由 " + n + " 个上游" : " · " + n + " 个可选模型")
+            : "";
+          opt.value = p.id;
+          opt.textContent = p.id + tail + extra;
+        }
+        select.appendChild(opt);
+      });
+      select.value = value || "";
+      const tip = document.createElement("div");
+      tip.className = "hintline";
+      const initial = value || "";
+      const paint = () => {
+        tip.textContent = providerHint(select.value);
+        if (select.value !== initial) {
+          // 分数尺度是跟模型走的，换模型不重标定等于沿用别人的阈值。
+          tip.textContent += "；⚠ 换判定模型后分数尺度会变，阈值需重新标定：先切「观察模式」攒够样本，再回来看分布。";
+          tip.classList.add("warn");
+        } else {
+          tip.classList.remove("warn");
+        }
+      };
+      paint();
+      select.addEventListener("change", () => {
+        setDirty(field.key, select.value);
+        paint();
+      });
+      cell.appendChild(select);
+      cell.appendChild(tip);
+    } else if (field.type === "bool") {
+      const wrap = document.createElement("div");
+      wrap.className = "switch";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = !!value;
+      const tip = document.createElement("span");
+      tip.className = "msg";
+      tip.textContent = input.checked ? "私聊也走判定" : "私聊直接放行";
+      input.addEventListener("change", () => {
+        setDirty(field.key, input.checked);
+        tip.textContent = input.checked ? "私聊也走判定" : "私聊直接放行";
+      });
+      wrap.appendChild(input);
+      wrap.appendChild(tip);
+      cell.appendChild(wrap);
+    }
+
+    row.appendChild(label);
+    row.appendChild(cell);
+    row.appendChild(out);
+    host.appendChild(row);
+  }
+
+  function renderFields() {
+    const cfg = state.data.config || {};
+    [["gateFields", GATE_FIELDS], ["replyFields", REPLY_FIELDS], ["mentionFields", MENTION_FIELDS]].forEach(([id, fields]) => {
+      const host = el(id);
+      host.innerHTML = "";
+      fields.forEach((field) => {
+        const value = Object.prototype.hasOwnProperty.call(state.draft, field.key) ? state.draft[field.key] : cfg[field.key];
+        buildField(field, value, host);
+      });
+    });
+  }
+
+  function currentThreshold() {
+    if (state.dirty.has("participation_confidence_threshold")) return Number(state.draft.participation_confidence_threshold);
+    return Number((state.data.config || {}).participation_confidence_threshold || 0);
+  }
+
+  function renderDistribution() {
+    const dist = (state.data && state.data.distribution) || {};
+    const buckets = dist.buckets || [];
+    const threshold = currentThreshold();
+    const total = dist.samples || 0;
+    const host = el("hist");
+    const axis = el("axis");
+    host.innerHTML = "";
+    axis.innerHTML = "";
+
+    if (!total) {
+      host.innerHTML = '<div class="empty">还没有当前判定模型的样本，群里来几条消息后这里会自动画出来。</div>';
+    } else {
+      const max = Math.max.apply(null, buckets.concat([1]));
+      buckets.forEach((count, index) => {
+        const lower = index * 10;
+        const col = document.createElement("div");
+        col.className = "col";
+        const num = document.createElement("div");
+        num.className = "num";
+        num.textContent = count ? String(count) : "";
+        const bar = document.createElement("div");
+        bar.className = "bar" + (lower >= threshold ? " pass" : "");
+        bar.style.height = Math.max(2, Math.round((count / max) * 76)) + "px";
+        bar.title = lower + "-" + (lower + 9) + " 分：" + count + " 条";
+        col.appendChild(num);
+        col.appendChild(bar);
+        host.appendChild(col);
+      });
+      buckets.forEach((_, index) => {
+        const label = document.createElement("span");
+        label.textContent = String(index * 10);
+        axis.appendChild(label);
+      });
+    }
+
+    const q = dist.quantiles || {};
+    const cur = dist.current || {};
+    const modelLabel = dist.model ? dist.model : "未记录模型";
+    // 「未知」= 升级前的旧日志，没有 mdl 字段；和「别的模型」不是一回事，文案要分开。
+    const modelKeys = Object.keys(dist.models || {});
+    const unknownOnly = modelKeys.length === 1 && modelKeys[0] === "未知";
+    const exclNote = dist.excluded
+      ? (unknownOnly
+          ? "（另有 " + dist.excluded + " 条升级前旧日志，未记录判定模型）"
+          : "（另有 " + dist.excluded + " 条来自其它模型，已排除）")
+      : "";
+    el("distKv").innerHTML = [
+      "<span>口径 <b>" + modelLabel + "</b> · 样本 <b>" + total + "</b>" + exclNote + "</span>",
+      "<span>当前阈值 <b>" + (cur.threshold == null ? "—" : cur.threshold) + "</b> → 放行率 <b>" + (cur.rate == null ? "—" : cur.rate + "%") + "</b></span>",
+      "<span>P50 <b>" + (q.p50 == null ? "—" : q.p50) + "</b> · P75 <b>" + (q.p75 == null ? "—" : q.p75) + "</b> · P90 <b>" + (q.p90 == null ? "—" : q.p90) + "</b></span>",
+    ].join("");
+    let sub;
+    if (!total && dist.excluded) {
+      sub = unknownOnly
+        ? "有 " + dist.excluded + " 条升级前的旧判定没有记录判定模型，分不清是哪把尺子量的，不计入。从现在起按模型分开统计。"
+        : "最近 " + dist.excluded + " 条判定来自其他模型或旧评分协议，已排除；新协议需要重新积累样本。";
+    } else if (!total) {
+      sub = "参与适合度分布；蓝色仅表示分数达标，放行还要求理解上下文且没有否决原因。";
+    } else if (total < 30) {
+      sub = "样本只有 " + total + " 条，少于 30 条时曲线波动大，先跑一天再看。";
+    } else {
+      sub = "最近 " + total + " 条新协议判定；蓝色仅表示分数达标，放行率同时计入理解状态和否决原因。";
+    }
+    if (dist.mixed && total && !unknownOnly) {
+      sub += "（已排除其它模型的 " + dist.excluded + " 条——同一句话换个模型能给差 40 分，分数不能混算）";
+    }
+    el("distSub").textContent = sub;
+
+    const chips = el("chips");
+    chips.innerHTML = "";
+    (dist.suggestions || []).forEach((item) => {
+      const btn = document.createElement("button");
+      btn.className = "chip";
+      btn.textContent = "放行率≈" + item.target + "% → 阈值 " + item.threshold;
+      btn.title = "点击填入阈值输入框（还需保存才生效）";
+      btn.addEventListener("click", () => {
+        setDirty("participation_confidence_threshold", item.threshold);
+        renderFields();
+        renderDistribution();
+      });
+      chips.appendChild(btn);
+    });
+  }
+
+  function renderStats() {
+    const t = state.data.today || {};
+    const life = state.data.lifetime || {};
+    el("todaySub").textContent =
+      "今日 " + (t.day || "—") + " · 平均分 " + (t.average_score || 0) +
+      " · 平均耗时 " + (t.average_latency_ms || 0) + "ms";
+    const cells = [
+      ["判断次数", t.judged || 0, "规则拦 " + (t.rule_blocked || 0)],
+      ["模型调用", t.model_calls || 0, "超时 " + (t.timeouts || 0) + " · 解析失败 " + (t.parse_errors || 0)],
+      ["放行 / 静默", (t.allowed || 0) + " / " + (t.silenced || 0), "省下生成 " + (t.gen_skipped || 0) + " 次"],
+      ["累计判断", life.total || 0, "放行 " + (life.allowed || 0) + " · 静默 " + (life.blocked || 0)],
+      ["累计平均分", life.average || 0, "分布看上方「分数分布」块"],
+    ];
+    el("stats").innerHTML = cells.map(([k, v, s]) =>
+      '<div class="stat"><em>' + esc(k) + "</em><strong>" + esc(v) + "</strong><small>" + esc(s) + "</small></div>"
+    ).join("");
+  }
+
+  function renderDecisions() {
+    const all = state.data.decisions || [];
+    const q = (state.q || "").trim().toLowerCase();
+    const rows = q
+      ? all.filter((d) => {
+          const raw = d.raw == null ? "" : String(d.raw);
+          const ctx = d.ctx == null ? "" : String(d.ctx);
+          return raw.toLowerCase().indexOf(q) !== -1 || ctx.toLowerCase().indexOf(q) !== -1;
+        })
+      : all;
+    const body = el("decisions");
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="8" class="empty">' + (q ? "无匹配结果" : "暂无记录") + "</td></tr>";
+      return;
+    }
+    body.innerHTML = rows.map((d) => {
+      const cls = d.action === "reply" ? "reply" : "silence";
+      const text = d.action === "reply" ? "放行" : "静默";
+      const raw = d.raw == null ? "" : String(d.raw);
+      const ctx = d.ctx == null ? "" : String(d.ctx);
+      const rawCell = raw || ctx
+        ? '<div class="raw-cell"><span class="raw-text" title="' + esc(raw) + '">' + esc(raw || "—") +
+          '</span><button class="raw-open" type="button" data-raw="' + esc(raw) + '" data-ctx="' + esc(ctx) + '">详情</button></div>'
+        : '<span class="raw-text" style="color:var(--muted)">—</span>';
+      return "<tr>" +
+        "<td>" + esc(fmtTime(d.ts)) + "</td>" +
+        "<td>" + esc(d.gid || "—") + "</td>" +
+        "<td>" + esc(d.score) + (d.corrected ? '<small title="模型输出与参与定义矛盾，已保留静默并修正评分">（原始 ' + esc(d.raw_score) + '）</small>' : "") + "</td>" +
+        "<td>" + esc(d.th) + "</td>" +
+        '<td><span class="pill ' + cls + '">' + text + "</span></td>" +
+        "<td>" + esc(REASON_LABEL[d.reason] || d.reason || "—") + "</td>" +
+        "<td>" + esc(d.ms) + "ms</td>" +
+        "<td>" + rawCell + "</td>" +
+        "</tr>";
+    }).join("");
+    Array.prototype.forEach.call(body.querySelectorAll(".raw-open"), (btn) => {
+      btn.addEventListener("click", () => {
+        const row = btn.closest("tr");
+        const time = row && row.children[0] ? row.children[0].textContent : "";
+        const score = row && row.children[2] ? row.children[2].textContent : "";
+        const reason = row && row.children[5] ? row.children[5].textContent : "";
+        openRawModal(btn.getAttribute("data-raw") || "", btn.getAttribute("data-ctx") || "", time, score, reason);
+      });
+    });
+  }
+
+  function openRawModal(raw, ctx, time, score, reason) {
+    el("rawModalTitle").textContent =
+      "判定详情" + (time ? " · " + time : "") + (score ? " · " + score + " 分" : "") + (reason ? " · " + reason : "");
+    const body = el("rawModalBody");
+    body.innerHTML = "";
+    const ctxTitle = document.createElement("div");
+    ctxTitle.className = "modal-sec";
+    ctxTitle.textContent = "判定上下文（送给模型的 prompt）";
+    const ctxText = document.createElement("div");
+    ctxText.className = "modal-sec-body";
+    ctxText.textContent = ctx || "（这条记录没有上下文：可能是规则层直接拦截，或升级前的旧日志）";
+    const rawTitle = document.createElement("div");
+    rawTitle.className = "modal-sec";
+    rawTitle.textContent = "模型结论（原话返回）";
+    const rawText = document.createElement("div");
+    rawText.className = "modal-sec-body mono";
+    rawText.textContent = raw || "（无模型返回：可能是超时、调用异常或规则层拦截）";
+    body.appendChild(ctxTitle);
+    body.appendChild(ctxText);
+    body.appendChild(rawTitle);
+    body.appendChild(rawText);
+    el("rawModal").classList.add("show");
+  }
+
+  function closeRawModal() {
+    el("rawModal").classList.remove("show");
+  }
+
+  // ---- 帮助手册：每个配置项的作用 + 例子 ----
+  const HELP_MANUAL = [
+    {
+      title: "闸门模式（总开关）",
+      items: [
+        { name: "硬闸门", key: "gate_mode=enforce", desc: "默认。每次判定后，低分消息直接拦截，主模型不会被调用，最省成本。", ex: "群里有人闲聊「今天好累」，判定 30 分 < 阈值 65 → 机器人不回复，省一次主模型调用。" },
+        { name: "观察模式", key: "gate_mode=shadow", desc: "只判定、只记录，不拦截。用来攒样本、校准阈值，不影响机器人行为。", ex: "切到观察模式跑一天，看「分数分布」里真实分数落在哪，再回来定阈值。" },
+        { name: "旧行为", key: "gate_mode=legacy", desc: "先生成再丢弃（旧逻辑），只在回滚时用，平时别选。", ex: "新逻辑出问题时临时切回，保证行为可预期。" },
+        { name: "已解耦", key: "gate_mode=off", desc: "插件完全不介入任何消息，等于关闭本插件。", ex: "想临时彻底关掉过滤，选这个。" },
+      ],
+    },
+    {
+      title: "判定参数",
+      items: [
+        { name: "参与阈值", key: "participation_confidence_threshold", desc: "分数是此刻参与的适合度，不是对静默的置信度。分数达标、understood=true、act=reply且没有否决原因才放行。", ex: "「行吧，到此为止」应低分静默；即使模型误打91分，也会保留静默，修正为不超过40分并显示原始分数。" },
+        { name: "判定模型", key: "classifier_provider_id", desc: "做参与判定用的小模型。空 = 跟随会话当前模型。换模型后分数尺度会变，阈值要重新标定。若选「多 API 模型路由」，下拉里还会展开它下面的每个具体上游模型（└ 标记），选中即锁定该模型、跳过自动降级。", ex: "选 deepseek-flash 又快又便宜；选「└ Qwen/Qwen3-8B（锁定上游）」则判定固定用这个便宜模型。" },
+        { name: "判定超时", key: "classifier_timeout_seconds", desc: "等判定模型返回的最长秒数。超时按「别插嘴」处理（宁可少说，不刷屏）。", ex: "设 3.5s：模型 3 秒没回 → 判定失败，机器人静默。" },
+        { name: "判定流水条数", key: "gate_context_messages", desc: "送给判定模型的最近聊天条数。越多上下文越准，但越费 token。", ex: "设 8：把最近 8 句话一起给模型，让它知道在聊什么。" },
+        { name: "最短参与字数", key: "gate_min_length", desc: "消息归一化后不足这个字数，直接静默，连模型都不调（省成本）。", ex: "设 2：「嗯」「哦」这类单字不发判定。" },
+        { name: "每小时判定上限", key: "gate_hourly_budget", desc: "每小时最多调多少次判定模型。超出后消息直接静默，防止模型费用失控。", ex: "设 60：活跃群一小时最多判 60 条，之后自动静默。" },
+      ],
+    },
+    {
+      title: "回复与防刷屏",
+      items: [
+        { name: "回复上下文条数", key: "participation_context_messages", desc: "放行后，送给主模型生成回复的上下文条数（和判定条数分开，省 token）。", ex: "判定用 8 条，主模型回复只需 4 条就够，分开配。" },
+        { name: "碎片等待", key: "fragment_wait_seconds", desc: "收到消息后等多久再判定，把同一句话拆成几条发的碎片合并起来。", ex: "设 1.2s：有人「我 / 想 / 问个事」分三条发，等 1.2 秒拼成一句再判。" },
+        { name: "主动冷却", key: "proactive_cooldown_seconds", desc: "机器人上次主动发言后，多久内不再主动插话，避免连续刷屏。", ex: "设 8s：刚说过话 8 秒内，来了新消息也不主动接。" },
+        { name: "去重窗口", key: "duplicate_window_seconds", desc: "同一句话在窗口内被问过，第二次不再重复回答。", ex: "设 120s：两人先后问「怎么下载」，只答第一个。" },
+        { name: "作用于私聊", key: "apply_to_private", desc: "开关：私聊是否也走参与判定。关 = 私聊直接放行（默认）。", ex: "关：私聊永远回复；开：私聊也按分数判定。" },
+      ],
+    },
+    {
+      title: "称呼与 @ 回复",
+      items: [
+        { name: "机器人称呼", key: "bot_names", desc: "机器人的名字，会被注册成唤醒词。以它开头的消息直接视为叫它，跳过参与判定。", ex: "设「恰比姐, 恰比」：「恰比 在吗」会直接唤醒机器人。" },
+        { name: "@ 回复方式", key: "empty_mention_mode", desc: "被 @ 但没实质内容时怎么回：固定文案（不调模型）或按人格生成。", ex: "固定文案省成本；人格生成更像真人。" },
+        { name: "@ 固定文案", key: "empty_mention_reply", desc: "上面选「固定文案」时，被 @ 就回这句。", ex: "设「嗯？有事就说。」被 @ 直接回这句。" },
+        { name: "@ 人格要求", key: "empty_mention_persona_prompt", desc: "上面选「按人格生成」时，这段会作为人格提示词喂给主模型。", ex: "「你是群里的老玩家，用轻松口语回应 @ 你的消息」。" },
+      ],
+    },
+    {
+      title: "其它说明",
+      items: [
+        { name: "分数分布 / 阈值扫描", key: "distribution", desc: "按当前判定模型的口径，展示最近打分的完整直方图和「阈值设在 X 会放行百分之多少」的曲线。换模型后样本会重新按模型分开统计。", ex: "点「放行率≈20% → 阈值 78」这个建议，可一键填入阈值输入框（还需点保存）。" },
+        { name: "试跑一条", key: "probe", desc: "不写统计、不占预算，手动喂一条消息看判定结果，验证阈值和小模型口径是否一致。", ex: "粘贴一条群消息点「判定一下」，看它给多少分、放不放行。" },
+        { name: "最近判定", key: "decisions", desc: "每条判定留痕：分数、阈值、决定、原因、耗时、模型原话和判定上下文。点「详情」看模型当时看到了什么、回了什么。", ex: "某条被静默，点详情看上下文判断模型是不是误判。" },
+      ],
+    },
+  ];
+
+  function renderHelp() {
+    const body = el("helpModalBody");
+    body.innerHTML = "";
+    HELP_MANUAL.forEach((group) => {
+      const g = document.createElement("div");
+      g.className = "help-group";
+      const h4 = document.createElement("h4");
+      h4.textContent = group.title;
+      g.appendChild(h4);
+      group.items.forEach((item) => {
+        const it = document.createElement("div");
+        it.className = "help-item";
+        const name = document.createElement("div");
+        name.className = "help-name";
+        name.textContent = item.name;
+        const key = document.createElement("span");
+        key.className = "help-key";
+        key.textContent = item.key;
+        name.appendChild(key);
+        const desc = document.createElement("div");
+        desc.className = "help-desc";
+        desc.textContent = item.desc;
+        const ex = document.createElement("div");
+        ex.className = "help-ex";
+        const b = document.createElement("b");
+        b.textContent = "例：";
+        ex.appendChild(b);
+        ex.appendChild(document.createTextNode(item.ex));
+        it.appendChild(name);
+        it.appendChild(desc);
+        it.appendChild(ex);
+        g.appendChild(it);
+      });
+      body.appendChild(g);
+    });
+  }
+
+  function openHelp() {
+    renderHelp();
+    el("helpModal").classList.add("show");
+  }
+
+  function closeHelp() {
+    el("helpModal").classList.remove("show");
+  }
+
+  function discardChanges() {
+    state.draft = {};
+    state.dirty.clear();
+    el("dirtyMsg").textContent = "";
+    hideSaveBar();
+    renderModes();
+    renderFields();
+    renderDistribution();
+  }
+
+  function applyState(data) {
+    state.data = data;
+    state.mode = data.mode;
+    state.draft = {};
+    state.dirty.clear();
+    el("dirtyMsg").textContent = "";
+    hideSaveBar();
+    el("ver").textContent = "v" + (data.version || "—");
+    themeModeBadge(data.mode);
+    renderModes();
+    renderFields();
+    renderStats();
+    renderDistribution();
+    renderDecisions();
+  }
+
+  async function load(full) {
+    try {
+      const data = await apiGet("console/state");
+      if (full || !state.data) {
+        applyState(data);
+        return;
+      }
+      state.data.today = data.today;
+      state.data.lifetime = data.lifetime;
+      state.data.decisions = data.decisions;
+      state.data.budget = data.budget;
+      state.data.distribution = data.distribution;
+      renderStats();
+      renderDistribution();
+      renderDecisions();
+    } catch (err) {
+      el("dirtyMsg").textContent = "读取失败：" + err.message;
+      el("dirtyMsg").className = "msg err";
+    }
+  }
+
+  async function save() {
+    const payload = {};
+    if (state.dirty.has("gate_mode")) payload.gate_mode = state.mode;
+    state.dirty.forEach((key) => {
+      if (key === "gate_mode") return;
+      const value = state.draft[key];
+      if (value === null || value === undefined) return;
+      if (value === "" && key !== "classifier_provider_id") return;
+      payload[key] = value;
+    });
+    if (!Object.keys(payload).length) {
+      el("saveMsg").textContent = "没有改动";
+      el("saveMsg").className = "msg";
+      return;
+    }
+    el("saveMsg").textContent = "保存中…";
+    el("saveMsg").className = "msg";
+    try {
+      const data = await apiPost("console/config", payload);
+      applyState(data);
+      el("saveMsg").textContent = "已保存并生效";
+      el("saveMsg").className = "msg ok";
+    } catch (err) {
+      el("saveMsg").textContent = "保存失败：" + err.message;
+      el("saveMsg").className = "msg err";
+    }
+  }
+
+  async function probe() {
+    const text = el("probeText").value.trim();
+    if (!text) {
+      el("probeMsg").textContent = "先输入一条消息";
+      el("probeMsg").className = "msg err";
+      return;
+    }
+    el("probeMsg").textContent = "判定中…";
+    el("probeMsg").className = "msg";
+    try {
+      const data = await apiPost("console/probe", { text, bot_line: el("probeBot").value.trim() });
+      const d = data.decision || {};
+      const box = el("probeOut");
+      box.className = "probe-out show";
+      box.innerHTML =
+        '<div class="kv" style="margin-top:0">' +
+        "<span>分数 <b>" + esc(d.score) + "</b></span>" +
+        "<span>阈值 <b>" + esc(d.threshold) + "</b></span>" +
+        "<span>结论 <b>" + (d.action === "reply" ? "放行" : "静默") + "</b></span>" +
+        "<span>原因 <b>" + esc(REASON_LABEL[d.reason] || d.reason) + "</b></span>" +
+        "<span>耗时 <b>" + esc(d.latency_ms) + "ms</b></span>" +
+        "</div>" +
+        '<div class="msg" style="margin-top:6px">模型原话：' + esc(data.raw || "（无）") + "</div>";
+      el("probeMsg").textContent = "";
+    } catch (err) {
+      el("probeMsg").textContent = "试跑失败：" + err.message;
+      el("probeMsg").className = "msg err";
+    }
+  }
+
+  async function reset() {
+    if (!window.confirm("清零今日统计与累计计数？判定日志文件不会被删除。")) return;
+    try {
+      const data = await apiPost("console/reset", {});
+      applyState(data);
+      el("resetMsg").textContent = "已清零";
+      el("resetMsg").className = "msg ok";
+    } catch (err) {
+      el("resetMsg").textContent = "清零失败：" + err.message;
+      el("resetMsg").className = "msg err";
+    }
+  }
+
+  el("saveBtn").addEventListener("click", save);
+  el("probeBtn").addEventListener("click", probe);
+  el("resetBtn").addEventListener("click", reset);
+  el("helpBtn").addEventListener("click", openHelp);
+  el("saveBarSave").addEventListener("click", save);
+  el("saveBarDiscard").addEventListener("click", discardChanges);
+  el("rawModalClose").addEventListener("click", closeRawModal);
+  el("rawModal").addEventListener("click", (ev) => {
+    if (ev.target === el("rawModal")) closeRawModal();
+  });
+  el("helpModalClose").addEventListener("click", closeHelp);
+  el("helpModal").addEventListener("click", (ev) => {
+    if (ev.target === el("helpModal")) closeHelp();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    if (el("rawModal").classList.contains("show")) closeRawModal();
+    if (el("helpModal").classList.contains("show")) closeHelp();
+  });
+
+  (async function boot() {
+    // bridge SDK 由宿主注入在本脚本之后的 body 末尾，等 DOMContentLoaded
+    // 之后再解析，避免拿到 undefined 而误报「未检测到后端环境」。
+    if (document.readyState === "loading") {
+      await new Promise((resolve) => document.addEventListener("DOMContentLoaded", resolve, { once: true }));
+    }
+    bridge = resolveBridge();
+    if (!bridge) {
+      el("dirtyMsg").textContent = "未检测到 AstrBot 插件页环境，请从插件详情页打开。";
+      el("dirtyMsg").className = "msg err";
+      return;
+    }
+    // 不要 await bridge.ready()：它靠宿主 postMessage 回传 context 才 resolve，
+    // 一旦宿主没发 context 消息就永远 pending，导致下面的 load 根本不执行。
+    // apiGet/apiPost 本身走 postMessage 请求通道，不依赖 ready，可以直接发。
+    const searchInput = el("decisionSearch");
+    searchInput.addEventListener("input", () => {
+      state.q = searchInput.value;
+      renderDecisions();
+    });
+    await load(true);
+    setInterval(() => load(false), 15000);
+  })();
+})();
+</script>
+</body>
+</html>
