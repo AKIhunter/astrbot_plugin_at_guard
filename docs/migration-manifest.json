@@ -1,0 +1,59 @@
+{
+  "migration_date": "2026-11-02",
+  "archived_source_repository": "https://github.com/AKIhunter/astrbot_plugin",
+  "source_commit": "70f73f1f249c0dddd79e262a0cc3fc50264c30f0",
+  "repository": "https://github.com/AKIhunter/astrbot_plugin_at_guard",
+  "files_before_path_and_document_updates": [
+    {
+      "source": "at_guard/.gitattributes",
+      "target": ".gitattributes",
+      "sha256": "7c4b31a1e474b912fcc5002f1cb7f3ccb26c0ac8303c0d8e8e8699dc5b8f45b9"
+    },
+    {
+      "source": "at_guard/README.md",
+      "target": "README.md",
+      "sha256": "e896af8d48d730399bb6149abc818a3562a8f3dd3ae212b6e074248d990650bb"
+    },
+    {
+      "source": "at_guard/_conf_schema.json",
+      "target": "_conf_schema.json",
+      "sha256": "64231ee95316131e1d296cc528c9fad1a4374a44822784dbd34444c723758827"
+    },
+    {
+      "source": "at_guard/guard_engine.py",
+      "target": "guard_engine.py",
+      "sha256": "2ca60e1c6b19b140f3797996f33c1cef7031e8c012657b229f5e06b129b59cd9"
+    },
+    {
+      "source": "at_guard/guard_webui.py",
+      "target": "guard_webui.py",
+      "sha256": "4c1b2981c82a0942051b460da6f1e6cf3d15637f08250dcdfd012f9e56fa719a"
+    },
+    {
+      "source": "at_guard/main.py",
+      "target": "main.py",
+      "sha256": "e821dcadc02e9c584553f755a9f3ff7f65e0d0339e87ff26202fb5634d91799b"
+    },
+    {
+      "source": "at_guard/metadata.yaml",
+      "target": "metadata.yaml",
+      "sha256": "d0e93727e3fb52873c0408c1c43ee57cfd3ecb5352295fd0f224af8fc7766b7d"
+    },
+    {
+      "source": "at_guard/pages/guard/index.html",
+      "target": "pages/guard/index.html",
+      "sha256": "5f3d5602f28ac7c6df2803aee3f43634a293cef648ec813c9ca2648cfe12230c"
+    },
+    {
+      "source": "at_guard/test_context_policy.py",
+      "target": "test_context_policy.py",
+      "sha256": "b174fd839d0c5b7a8a977c1aa9c65bea2308734503f1ded3f1e1c0d336fe76a7"
+    },
+    {
+      "source": "at_guard/test_gate.py",
+      "target": "test_gate.py",
+      "sha256": "38241bf96f45f01219493722aa1e7f375812aae59f90b9e583bf4c988f7206a1"
+    }
+  ],
+  "purpose": "Source audit only; future edits take place in this independent repository."
+}

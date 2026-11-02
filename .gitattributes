@@ -1,1 +1,2 @@
 test_*.py export-ignore
+docs/ export-ignore
