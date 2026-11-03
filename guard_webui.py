@@ -11,6 +11,7 @@ import asyncio
 import inspect
 import json
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -46,7 +47,9 @@ NUMERIC_FIELDS: dict[str, tuple[str, float, float]] = {
     "proactive_cooldown_seconds": ("float", 0, 60.0),
     "duplicate_window_seconds": ("int", 0, 3600),
 }
-BOOL_FIELDS = {"apply_to_private", "gate_main_fallback_enabled"}
+BOOL_FIELDS = {
+    "apply_to_private", "gate_main_fallback_enabled", "gate_congling_prepare_compat",
+}
 STRING_FIELDS = {
     "gate_mode",
     "classifier_provider_id",
@@ -234,10 +237,39 @@ async def _state(plugin: Any) -> dict[str, Any]:
         },
         "budget": engine.budget_usage(),
         "image_cache": plugin._image_observation_cache().snapshot(),
+        "congling_compat": _congling_compat(plugin),
         "providers": await _providers(plugin),
         "distribution": engine.score_distribution(engine.provider_label()),
         "decisions": engine.log.recent(100),
     }
+
+
+def _congling_compat(plugin: Any) -> dict[str, Any]:
+    """只检查已加载插件元数据，不导入或修改从绫，也不凭版本号猜测事件计时支持。"""
+    result = {
+        "detected": False,
+        "active": False,
+        "order": "unknown",
+        "prepare_accounting": _current(plugin, "gate_congling_prepare_compat", True) is True,
+    }
+    try:
+        metadata = plugin.context.get_registered_star("astrbot_plugin_congling")
+        if metadata is None:
+            metadata = plugin.context.get_registered_star("congling")
+        if metadata is None:
+            return result
+        result["detected"] = True
+        result["active"] = bool(getattr(metadata, "activated", False))
+        result["version"] = str(getattr(metadata, "version", "") or "")
+        instance = getattr(metadata, "star_cls", None)
+        module = sys.modules.get(type(instance).__module__) if instance is not None else None
+        priority = getattr(module, "PRIO_PERSONA", None)
+        if isinstance(priority, int) and not isinstance(priority, bool):
+            result["persona_priority"] = priority
+            result["order"] = "after_guard" if priority < 10000 else "before_or_equal_guard"
+    except Exception:
+        pass
+    return result
 
 
 def _load_schema_subset() -> dict[str, Any]:

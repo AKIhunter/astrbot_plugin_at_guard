@@ -370,6 +370,7 @@
       <h2><span class="section-number">05</span>回复节奏</h2>
       <p class="sub">控制等待、冷却和重复回复。</p>
       <div id="replyFields"></div>
+      <div class="flow-note" id="conglingCompat" role="status"></div>
     </section>
     <section class="card" id="mentions">
       <h2><span class="section-number">06</span>称呼、空 @ 与私聊</h2>
@@ -561,6 +562,7 @@
     { key: "proactive_cooldown_seconds", label: "主动回复冷却", type: "number", min: 0, max: 60, step: 0.1, unit: "秒" },
     { key: "duplicate_window_seconds", label: "相同消息去重", type: "number", min: 0, max: 3600, step: 1, unit: "秒" },
     { key: "gate_reply_max_age_seconds", label: "回复机会有效期", type: "number", min: 5, max: 120, step: 1, unit: "秒" },
+    { key: "gate_congling_prepare_compat", label: "从绫爬楼配套", type: "bool" },
   ];
   const MENTION_FIELDS = [
     { key: "bot_names", label: "机器人称呼", type: "list", placeholder: "恰比姐, 恰比" },
@@ -591,7 +593,8 @@
     fragment_wait_seconds: { desc: "普通自主回复先等一会儿，收集紧随其后的碎片消息。0 表示不等。明确呼叫不等待。", ex: "设 1.2 秒：有人连续发「我想问」和「怎么加点」，尽量一起参考；会增加等待时间。" },
     proactive_cooldown_seconds: { desc: "上次主动回复后，同群在这段时间内不再主动接话。0 表示关闭冷却。", ex: "设 8 秒：机器人刚主动说完，接下来 8 秒不连续抢话。" },
     duplicate_window_seconds: { desc: "近期已回复的相同文字，在同群的这段时间里不重复回复。0 表示关闭去重。", ex: "设 60 秒：同群一分钟内再次问相同的「怎么下载」，避免重复回答。" },
-    gate_reply_max_age_seconds: { desc: "从收到消息到发送回复的总机会窗口，包含等待、判定和生成；群聊更新也会取消旧回复。", ex: "设 30 秒：等待 4 秒、判定 6 秒后，生成和发送还需在剩余时间内完成。" },
+    gate_reply_max_age_seconds: { desc: "自主回复的等待、判定和生成受此时限约束；从绫配套开启时只扣除已上报的实际准备耗时，新消息仍取消旧回复。", ex: "设30秒：收到后60秒，爬楼准备占45秒，剩余已用15秒可继续；总计80秒则净用35秒，会过期。" },
+    gate_congling_prepare_compat: { desc: "新版从绫上报爬楼/补课准备秒数后，扣除它对回复有效期的占用；无有效上报时保持原规则。", ex: "开启：先通过at_guard，再从绫读历史，最后回复当前问题；关闭则爬楼也占有效期。从绫人格钩子须晚于闸门执行。" },
     bot_names: { desc: "消息以这些名字开头时，视为明确叫机器人，跳过自主参与判定。名称用逗号分隔。", ex: "填「恰比姐，恰比」：「恰比 在吗」会明确唤醒；修改称呼后重载插件以更新框架前缀。" },
     empty_mention_mode: { desc: "只 @ 机器人、没有具体内容时，选固定一句话，或让当前会话人格生成。", ex: "固定文案：直接回「嗯？有事就说。」；按人格生成：不同会话用各自人格回应。" },
     empty_mention_reply: { desc: "只在「固定文案」模式生效，不调用模型。", ex: "填「在呢，怎么啦？」：群友只 @ 机器人时直接发送这一句。" },
@@ -806,12 +809,15 @@
       tip.className = "msg";
       const boolHint = () => field.key === "gate_main_fallback_enabled"
         ? (input.checked ? "视觉异常时兜底一次" : "视觉异常则静默")
+        : field.key === "gate_congling_prepare_compat"
+        ? (input.checked ? "扣除已上报的爬楼准备时间" : "按原始总耗时检查")
         : (input.checked ? "私聊也走判定" : "私聊直接放行");
       tip.textContent = boolHint();
       input.addEventListener("change", () => {
         setDirty(field.key, input.checked);
         tip.textContent = boolHint();
         syncFieldAvailability();
+        renderConglingCompat();
       });
       wrap.appendChild(input);
       wrap.appendChild(tip);
@@ -856,6 +862,20 @@
       });
     });
     syncFieldAvailability();
+    renderConglingCompat();
+  }
+
+  function renderConglingCompat() {
+    const host=el("conglingCompat");
+    const status=state.data.congling_compat || {};
+    const enabled=currentConfig("gate_congling_prepare_compat") !== false;
+    let text=enabled ? "已开启准备耗时适配。" : "已关闭准备耗时适配，爬楼仍计入总有效期。";
+    if(!status.detected) text+=" 未检测到从绫；没有有效准备计时就使用原规则。";
+    else if(!status.active) text+=" 从绫已安装但未启用。";
+    else if(status.order==="after_guard") text+=" 从绫已运行，钩子顺序符合先判定后爬楼；是否扣时取决于当前事件的实际计时上报。";
+    else if(status.order==="before_or_equal_guard") text+=" 从绫已运行，但人格钩子早于或等于闸门；请更新配套版本，避免判定前就发爬楼语。";
+    else text+=" 从绫已运行，钩子顺序无法确认；请使用支持准备计时的配套版本。";
+    host.textContent=text;
   }
 
   function currentConfig(key) {
@@ -1393,6 +1413,8 @@
       state.data.decisions = data.decisions;
       state.data.budget = data.budget;
       state.data.image_cache = data.image_cache;
+      state.data.congling_compat = data.congling_compat;
+      renderConglingCompat();
       state.data.distribution = data.distribution;
       renderStats();
       renderDistribution();

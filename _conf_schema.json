@@ -113,7 +113,13 @@
     "description": "自主回复机会有效期（秒）",
     "type": "float",
     "default": 30,
-    "hint": "等待、判定、生成超过此时间则取消自主回复。判定或生成期间有新群消息也取消旧回复；显式呼叫不受此限制。范围5-120秒。"
+    "hint": "普通自主回复的等待、判定、生成计入有效期；开启从绫配套且从绫上报实际爬楼准备秒数时，扣除该段耗时。正文超时或出现新消息仍取消；显式呼叫不受此限制。范围5-120秒。"
+  },
+  "gate_congling_prepare_compat": {
+    "description": "适配从绫爬楼准备耗时",
+    "type": "bool",
+    "default": true,
+    "hint": "默认开：扣除新版congling在当前事件上报的实际爬楼/补课准备耗时，防止读完历史后当前答复立即过期。无congling、旧版未上报或计时无效时不扣除。关闭按原总年龄检查。新消息撤销、正文超时仍保留；需congling人格钩子在at_guard判定之后执行。"
   },
   "gate_memory_timeout_seconds": {
     "description": "背景记忆检索超时（秒）",

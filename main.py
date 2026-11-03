@@ -2,6 +2,7 @@ import asyncio
 import html
 import importlib
 import json
+import math
 import re
 import time
 from collections import defaultdict, deque
@@ -604,9 +605,33 @@ class Main(Star):
             "gen_skipped": False,
         })
 
+    def _reply_timing(self, event: AstrMessageEvent) -> dict[str, float]:
+        started = event.get_extra("_at_guard_recorded_at")
+        age = max(0.0, time.monotonic() - float(started)) if started is not None else 0.0
+        preparation = 0.0
+        try:
+            if self.config.get("gate_congling_prepare_compat", True) is True:
+                raw = event.get_extra("congling:wake_prepare_seconds")
+                if not isinstance(raw, bool):
+                    value = float(raw or 0)
+                    # 不接受超过事件实际年龄的计时；错误值不能把生成期限无限推后。
+                    if math.isfinite(value) and 0 <= value <= age:
+                        preparation = value
+        except (TypeError, ValueError, OverflowError):
+            pass
+        return {
+            "elapsed_seconds": age,
+            "preparation_seconds": preparation,
+            "effective_seconds": age - preparation,
+        }
+
     def _stale_reason(self, event: AstrMessageEvent, group_key: str) -> str:
         started = event.get_extra("_at_guard_recorded_at")
-        if started is not None and time.monotonic() - float(started) > self.engine.reply_max_age():
+        # 爬楼是真实的请求准备工作；只扣除它的耗时，正文生成仍受过期限制。
+        if (
+            started is not None
+            and self._reply_timing(event)["effective_seconds"] > self.engine.reply_max_age()
+        ):
             return "message_expired"
         revision = event.get_extra("_at_guard_judged_revision")
         if revision is not None and revision != self.context_revision.get(group_key, 0):
