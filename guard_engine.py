@@ -285,6 +285,7 @@ class Decision:
     stage: str = "text"
     model: str = ""
     attempts: list[dict[str, Any]] = field(default_factory=list)
+    timings: dict[str, Any] = field(default_factory=lambda: {"version": 1})
     image_count: int = 0
     image_summaries: list[dict[str, Any]] = field(default_factory=list)
     image_sources: list[dict[str, str]] = field(default_factory=list)
@@ -313,6 +314,7 @@ class Decision:
             "stage": self.stage,
             "model": self.model,
             "attempts": self.attempts,
+            "timings": self.timings,
             "image_count": self.image_count,
             "image_summaries": self.image_summaries,
             "image_sources": self.image_sources,
@@ -323,8 +325,27 @@ class Decision:
         }
 
 
+def decision_identity(entry: dict[str, Any]) -> dict[str, str]:
+    """兼容旧私聊UMO；群消息的发送者不能冒充私聊对象。"""
+    chat = entry.get("chat_data") or {}
+    current = chat.get("current_message") or {} if isinstance(chat, dict) else {}
+    if not isinstance(current, dict):
+        current = {}
+    gid = str(entry.get("gid") or "")
+    session = str(entry.get("session_id") or current.get("session_id") or gid)
+    kind = str(entry.get("session_type") or current.get("session_type") or "")
+    private = kind == "private" or bool(re.search(r":(?:FriendMessage|friend):", session, re.I))
+    return {
+        "session_id": session,
+        "session_type": "private" if private else "group",
+        "group_id": "" if private else str(entry.get("group_id") or current.get("group_id") or gid),
+        "private_qq": str(entry.get("private_qq") or current.get("private_qq")
+                          or current.get("sender_id") or session.rsplit(":", 1)[-1]) if private else "",
+    }
+
+
 class DecisionLog:
-    """判定留痕：内存环形 + JSONL 落盘，超过阈值自动轮转。"""
+    """判定留痕：有界内存，永久轮转归档；重载恢复最近记录。"""
 
     def __init__(
         self,
@@ -339,24 +360,46 @@ class DecisionLog:
             self._load_tail()
 
     def _load_tail(self) -> None:
+        if self.path is None:
+            return
+        # 从最新文件倒读有界尾部，兼容旧 .1，不因当前文件刚轮转为空而丢记录。
+        files = ([self.path.with_suffix(self.path.suffix + ".1")]
+                 + sorted(self.path.parent.glob(self.path.name + ".archive-*"))
+                 + [self.path])
+        rows = []
+        for path in reversed(files):
+            for line in self._tail_lines(path):
+                try:
+                    item = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(item, dict):
+                    rows.append(item)
+                if len(rows) >= self.ring.maxlen:
+                    self.ring.extend(reversed(rows))
+                    return
+        self.ring.extend(reversed(rows))
+
+    @staticmethod
+    def _tail_lines(path: Path):
+        """倒序流式读取，内存最多一个日志行＋64KB，不整文件读入。"""
         try:
-            if not self.path or not self.path.exists():
-                return
-            if self.path.stat().st_size > 4 * 1024 * 1024:
-                return
-            lines = self.path.read_text(encoding="utf-8", errors="replace").splitlines()
+            with path.open("rb") as handle:
+                position = handle.seek(0, 2)
+                pending = b""
+                while position:
+                    size = min(position, 65536)
+                    position -= size
+                    handle.seek(position)
+                    parts = (handle.read(size) + pending).split(b"\n")
+                    pending = parts[0]
+                    for line in reversed(parts[1:]):
+                        if line.strip():
+                            yield line.decode("utf-8", errors="replace")
+                if pending.strip():
+                    yield pending.decode("utf-8", errors="replace")
         except OSError:
             return
-        for line in lines[-self.ring.maxlen :]:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                item = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(item, dict):
-                self.ring.append(item)
 
     def add(self, entry: dict[str, Any]) -> None:
         self.ring.append(entry)
@@ -366,16 +409,23 @@ class DecisionLog:
             with self.path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
             if self.path.stat().st_size > self.max_bytes:
-                rotated = self.path.with_suffix(self.path.suffix + ".1")
-                rotated.unlink(missing_ok=True)
+                rotated = self.path.with_name(self.path.name + f".archive-{time.time_ns():020d}")
                 self.path.replace(rotated)
         except OSError:
             pass
 
-    def recent(self, limit: int = 60) -> list[dict[str, Any]]:
-        items = list(self.ring)[-limit:]
-        items.reverse()
-        return items
+    def recent(self, limit: int = 60, query: str = "") -> list[dict[str, Any]]:
+        q = str(query or "").strip().casefold()[:120]
+        items = reversed(self.ring)
+        if q:
+            items = (item for item in items if q in
+                     json.dumps({**item, **decision_identity(item)}, ensure_ascii=False).casefold())
+        result = []
+        for item in items:
+            result.append(item)
+            if len(result) >= max(1, min(int(limit), self.ring.maxlen)):
+                break
+        return result
 
 
 class GateEngine:
@@ -789,6 +839,7 @@ class GateEngine:
                 "memory_grounded": decision.memory_grounded,
                 "stage": decision.stage,
                 "attempts": decision.attempts,
+                "timings": decision.timings,
                 "image_count": decision.image_count,
                 "image_summaries": decision.image_summaries,
                 "image_sources": decision.image_sources,
@@ -796,6 +847,7 @@ class GateEngine:
                 "chat_data": decision.chat_data,
                 "image_cache_hits": decision.image_cache_hits,
                 "available_image_count": decision.available_image_count,
+                **decision_identity({"gid": group_key, "chat_data": decision.chat_data}),
             }
         )
 
@@ -889,11 +941,22 @@ class GateEngine:
         images: list[dict[str, str]] = []
         image_sources: list[dict[str, str]] = []
         last_raw = ""
+        timings: dict[str, Any] = {"version": 1}
 
         def finish(decision: Decision) -> Decision:
             decision.stage = stage
             decision.model = str(attempts[-1].get("model", "")) if attempts else ""
             decision.attempts = list(attempts)
+            decision.timings = dict(timings)
+            for capability, model_stage in (("text", "text"), ("vision", "vision"),
+                                             ("main_fallback", "main_fallback")):
+                calls = [a for a in attempts if a["stage"] == model_stage
+                         and a.get("called")]
+                if calls:
+                    decision.timings[capability] = {
+                        "ms": sum(a["ms"] for a in calls), "calls": len(calls),
+                        "status": calls[-1]["status"],
+                    }
             decision.image_count = len(images)
             decision.model_calls = model_calls
             decision.image_sources = list(image_sources)
@@ -952,6 +1015,7 @@ class GateEngine:
                 kwargs["image_urls"] = [item["url"] for item in images]
             # 文字层不传图片；调用原生 provider，不触发聊天事件或公开回复。
             model_calls += 1
+            attempt["called"] = True
             try:
                 timeout = self.timeout() if stage == "text" else (
                     self.vision_timeout() if stage == "vision" else self.main_timeout())
@@ -1012,8 +1076,22 @@ class GateEngine:
             memory_checked = True
             try:
                 if resolve_memory is not None:
-                    lines = await bounded(resolve_memory(), self.memory_timeout())
-                    memory_lines = tuple(str(line)[:400] for line in lines[:3] if str(line).strip())
+                    memory_started = time.monotonic()
+                    metric = {"calls": 1, "status": "ok"}
+                    try:
+                        lines = await bounded(resolve_memory(), self.memory_timeout())
+                        memory_lines = tuple(str(line)[:400] for line in lines[:3] if str(line).strip())
+                        if not memory_lines:
+                            metric["status"] = "empty"
+                    except asyncio.TimeoutError:
+                        metric["status"] = "timeout"
+                        raise
+                    except BaseException as exc:
+                        metric["status"] = "cancelled" if isinstance(exc, asyncio.CancelledError) else "error"
+                        raise
+                    finally:
+                        metric["ms"] = round((time.monotonic() - memory_started) * 1000, 2)
+                        timings["memory"] = metric
             except Exception:
                 pass
             if memory_lines:

@@ -184,6 +184,7 @@ async def collect_empty_mention(instance, event):
 def gate_config(**overrides):
     config = {
         "gate_mode": "enforce",
+        "expression_takeover_enabled": False,
         "participation_confidence_threshold": 65,
         "classifier_timeout_seconds": 2.0,
         "gate_context_messages": 8,

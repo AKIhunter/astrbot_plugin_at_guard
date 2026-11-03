@@ -1,4 +1,22 @@
 {
+  "expression_takeover_enabled": {"type":"bool","default":true,"description":"启用回复方式管理","hint":"可独立使用，也可与从绫配套；只管理主回复的发送方式。从绫感知、人设、情绪与记忆按原生配置运行。"},
+  "reply_quote_enabled": {"type":"bool","default":true,"description":"引用当前消息","hint":"开启后首条正文必定引用有效原消息；不使用概率。"},
+  "reply_mention_enabled": {"type":"bool","default":false,"description":"@当前发送者","hint":"开启后群聊首条正文必定使用原生@；私聊或平台不支持时不伪造。"},
+  "reply_typing_enabled": {"type":"bool","default":false,"description":"模拟回复耗时"},
+  "reply_typing_chars_per_second": {"type":"float","default":2.5,"description":"模拟打字速度（字/秒）","slider":{"min":0.5,"max":20,"step":0.1}},
+  "reply_recall_group": {"type":"bool","default":false,"description":"群聊撤回消息不回复"},
+  "reply_recall_private": {"type":"bool","default":false,"description":"私聊撤回消息不回复"},
+  "expression_strip_emoji": {"type":"bool","default":true,"description":"清理文本Emoji和颜文字"},
+  "understand_expand_forward": {"type":"bool","default":true,"description":"展开合并转发"},
+  "understand_forward_max_nodes": {"type":"int","default":60,"description":"最多展开条数","slider":{"min":1,"max":300,"step":1}},
+  "understand_forward_max_depth": {"type":"int","default":2,"description":"转发最大层数","slider":{"min":0,"max":8,"step":1}},
+  "understand_forward_summary_threshold": {"type":"int","default":1200,"description":"转发摘要阈值","slider":{"min":100,"max":12000,"step":100}},
+  "understand_quote_depth": {"type":"int","default":3,"description":"引用链展开层数","slider":{"min":0,"max":8,"step":1}},
+  "understand_card_parse": {"type":"bool","default":true,"description":"解析卡片和小程序"},
+  "understand_image_enabled": {"type":"bool","default":true,"description":"图片理解"},
+  "understand_image_provider_id": {"type":"string","default":"","description":"图片理解模型","editor_mode":"select_provider"},
+  "understand_voice_enabled": {"type":"bool","default":false,"description":"语音转文字理解"},
+  "understand_voice_provider_id": {"type":"string","default":"","description":"语音理解模型","editor_mode":"select_provider"},
   "gate_mode": {
     "description": "闸门模式（总开关）",
     "type": "string",
@@ -9,7 +27,7 @@
       "legacy",
       "off"
     ],
-    "hint": "enforce=判完就拦，低于阈值的消息不调用主模型；shadow=只判定记录不拦截，用来校准阈值；legacy=旧行为（先生成再丢弃）；off=插件完全解耦，等同未挂载。"
+    "hint": "off仅关闭参与判断；回复方式、撤回保护和碎片等待分别控制。"
   },
   "participation_confidence_threshold": {
     "description": "普通群消息参与判断",
@@ -173,7 +191,7 @@
     "description": "是否作用于私聊",
     "type": "bool",
     "default": false,
-    "hint": "关闭时插件完全跳过私聊请求和响应；开启后私聊也使用参与置信度阈值。默认关闭。"
+    "hint": "开启后私聊也使用参与置信度阈值。关闭仅跳过私聊参与判断；碎片等待、表达与撤回保护由各自开关控制。"
   },
   "participation_context_messages": {
     "description": "参与回复的上下文条数",
@@ -189,13 +207,19 @@
   "fragment_wait_seconds": {
     "description": "碎片消息等待时间（秒）",
     "type": "float",
-    "default": 1.2,
+    "default": 3,
     "slider": {
       "min": 0,
       "max": 5,
       "step": 0.1
     },
-    "hint": "普通主动回复请求短暂等待，以收集紧随其后的群消息。明确 @机器人、引用机器人或叫机器人名字时不等待。这段等待会叠加在回复延迟上。"
+    "hint": "群聊包含明确 @机器人、引用机器人、称呼唤醒。按完整会话和同一用户收集连续消息，每次续发重新计时，安静满此秒数后统一判断一次；其他用户不重置。0=关闭。"
+  },
+  "fragment_wait_private": {
+    "description": "私聊也等待碎片消息",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后私聊也按同一用户续发重置等待并合并完整输入；与「是否作用于私聊」的参与判断开关独立。关闭时私聊不等碎片。"
   },
   "proactive_cooldown_seconds": {
     "description": "主动回复冷却（秒）",

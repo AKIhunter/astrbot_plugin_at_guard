@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 import re
 import sys
 import time
@@ -21,8 +22,14 @@ from astrbot.api.star import Context
 from astrbot.api.web import error_response, json_response, request
 try:
     from .guard_media import image_target
+    from .guard_expression_help import HELP as EXPRESSION_HELP
+    from .guard_understanding import audio_capable
+    from .guard_native_reply import NativeReply, NativeReplyError
 except ImportError:
     from guard_media import image_target
+    from guard_expression_help import HELP as EXPRESSION_HELP
+    from guard_understanding import audio_capable
+    from guard_native_reply import NativeReply, NativeReplyError
 
 PLUGIN_NAME = "astrbot_plugin_at_guard"
 SCHEMA_PATH = Path(__file__).resolve().parent / "_conf_schema.json"
@@ -49,6 +56,7 @@ NUMERIC_FIELDS: dict[str, tuple[str, float, float]] = {
 }
 BOOL_FIELDS = {
     "apply_to_private", "gate_main_fallback_enabled", "gate_congling_prepare_compat",
+    "fragment_wait_private", "reply_quote_enabled", "reply_mention_enabled",
 }
 STRING_FIELDS = {
     "gate_mode",
@@ -59,13 +67,34 @@ STRING_FIELDS = {
     "empty_mention_persona_prompt",
 }
 LIST_FIELDS = {"bot_names"}
+# 新表达/理解配置直接从宿主schema派生白名单和数值范围，避免UI与后端漏项。
+_expression_schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8-sig"))
+for _key, _field in _expression_schema.items():
+    if not _key.startswith(("expression_", "understand_", "reply_typing_", "reply_recall_")):
+        continue
+    _type = _field["type"]
+    if _type in {"int", "float"}:
+        _bounds = _field["slider"]
+        NUMERIC_FIELDS[_key] = (_type, _bounds["min"], _bounds["max"])
+    elif _type == "bool":
+        BOOL_FIELDS.add(_key)
+    elif _type == "string":
+        STRING_FIELDS.add(_key)
 EDITABLE = set(NUMERIC_FIELDS) | BOOL_FIELDS | STRING_FIELDS | LIST_FIELDS
+POLICY_FIELDS = {
+    "gate_mode", "classifier_provider_id", "classifier_timeout_seconds",
+    "participation_confidence_threshold", "gate_min_length",
+    "vision_provider_id", "gate_main_fallback_enabled", "gate_main_fallback_timeout_seconds",
+    "vision_timeout_seconds", "gate_image_cache_ttl_seconds",
+    "gate_context_messages", "gate_context_max_age_seconds",
+    "gate_memory_timeout_seconds", "participation_context_messages",
+}
 
 MODE_LABELS = {
     "enforce": "硬闸门（判完就拦，低分不生成）",
     "shadow": "观察模式（只判定不拦截，用于校准阈值）",
     "legacy": "旧行为（先生成再丢弃，仅回滚用）",
-    "off": "已解耦（插件完全不介入）",
+    "off": "关闭参与判断（回复方式与撤回开关独立）",
 }
 
 Handler = Callable[[Any], Awaitable[Any]]
@@ -215,6 +244,29 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
                 }
     except Exception as exc:
         logger.debug(f"[智能过滤] 读取模型列表失败: {exc!r}")
+    for item in items.values():
+        item["role"] = "chat"
+        try:
+            provider = plugin.context.get_provider_by_id(item.get("parent", item["id"]))
+            if getattr(provider, "upstreams", None):
+                item["supports_audio"] = any(
+                    getattr(u, "client", None) is not None and audio_capable(u.client)
+                    and (item["kind"] != "router_upstream" or u.client.get_model() == item["model"])
+                    for u in provider.upstreams)
+            else:
+                item["supports_audio"] = audio_capable(provider)
+        except Exception:
+            item["supports_audio"] = False
+    for role in ("stt",):
+        getter = getattr(plugin.context, "get_all_" + role + "_providers", None)
+        for provider in getter() if callable(getter) else []:
+            config = getattr(provider, "provider_config", {}) or {}
+            provider_id = str(config.get("id", "") or "")
+            if provider_id:
+                items[provider_id] = {"id": provider_id, "model": str(
+                    getattr(provider, "get_model", lambda: "")() or ""),
+                    "kind": "provider", "role": role, "upstreams": [], "instances": 1,
+                    "supports_images": False, "supports_audio": role == "stt"}
     return sorted(items.values(), key=lambda item: item["id"])
 
 
@@ -228,6 +280,8 @@ async def _state(plugin: Any) -> dict[str, Any]:
         "modeLabels": MODE_LABELS,
         "config": {key: _current(plugin, key, schema.get(key, {}).get("default")) for key in EDITABLE},
         "schema": schema,
+        "fieldHelp": {key: {"desc": values[0], "examples": list(values[1:])}
+                      for key, values in EXPRESSION_HELP.items()},
         "today": engine.snapshot(),
         "lifetime": {
             "total": int(participation.get("total", 0) or 0),
@@ -317,7 +371,7 @@ def _coerce(key: str, value: Any) -> Any:
         number = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{key} 需要数字") from exc
-    if number < low or number > high:
+    if not math.isfinite(number) or number < low or number > high:
         raise ValueError(f"{key} 超出范围 {low}~{high}")
     return int(round(number)) if kind == "int" else round(number, 2)
 
@@ -349,28 +403,74 @@ async def handle_config(plugin: Any):
 
     providers = await _providers(plugin)
     known = {item["id"] for item in providers}
-    for key in ("classifier_provider_id", "vision_provider_id"):
+    for key in ("classifier_provider_id", "vision_provider_id", "understand_image_provider_id",
+                "understand_voice_provider_id"):
         provider_id = updates.get(key)
         if provider_id and provider_id not in known:
             return _failure(f"模型 {provider_id} 不在可用列表中")
-        if key == "vision_provider_id" and provider_id and not any(
+        if key in {"vision_provider_id", "understand_image_provider_id"} and provider_id and not any(
             item["id"] == provider_id and item.get("supports_images") for item in providers
         ):
             return _failure(f"模型 {provider_id} 无法确认支持图片，请选择视觉模型")
+        if key == "understand_voice_provider_id" and provider_id and not any(
+                item["id"] == provider_id and item.get("supports_audio") for item in providers):
+            return _failure("语音理解需要原生STT或支持音频输入的模型")
 
-    for key, value in updates.items():
-        try:
-            plugin.config[key] = value
-        except Exception as exc:
-            return _failure(f"写入 {key} 失败: {exc}", 500)
+    missing = object()
+    before = {key: plugin.config.get(key, missing) for key in updates}
+    changed = [key for key, value in updates.items() if before[key] != value]
     try:
+        for key, value in updates.items():
+            plugin.config[key] = value
         plugin.config.save_config()
     except Exception as exc:
+        # 保存失败恢复运行中配置，不让“保存失败”实际改变判定逻辑。
+        for key, value in before.items():
+            if value is missing:
+                plugin.config.pop(key, None)
+            else:
+                plugin.config[key] = value
         logger.exception(f"[智能过滤] 保存配置失败: {exc}")
         return _failure(f"配置未落盘: {exc}", 500)
 
     logger.info(f"[智能过滤] 控制台更新 {len(updates)} 项: {sorted(updates)}")
-    return _response(await _state(plugin), f"已保存 {len(updates)} 项")
+    data = await _state(plugin)
+    data["save_notice"] = ("判定口径已变化，旧统计与运行记录仍保留，分析时请结合修改时间。"
+                           if POLICY_FIELDS.intersection(changed)
+                           else "运行统计与判定记录已保留。")
+    return _response(data, f"已保存 {len(changed)} 项")
+
+
+async def handle_decisions(plugin: Any):
+    # AstrBot插件请求使用query；args仅兼容旧宿主，不能假定当前框架提供它。
+    params = getattr(request, "query", None)
+    if params is None:
+        params = getattr(request, "args", {})
+    query = str(params.get("query", "") or "")[:120]
+    return _response({
+        "decisions": plugin.engine.log.recent(100, query=query),
+        "query": query, "retained": len(plugin.engine.log.ring), "limit": 100,
+    })
+
+
+def _native(plugin):
+    if not hasattr(plugin, "_native_reply"):
+        plugin._native_reply = NativeReply(plugin.context)
+    return plugin._native_reply
+
+
+async def handle_native_segments(plugin):
+    try:
+        return _response(_native(plugin).read(request.query.get("config_id", "default")))
+    except NativeReplyError as exc:
+        return _failure(str(exc), exc.status)
+
+
+async def handle_save_native_segments(plugin):
+    try:
+        return _response(await _native(plugin).save(request, await request.json(default={})))
+    except NativeReplyError as exc:
+        return _failure(str(exc), exc.status)
 
 
 async def handle_reset(plugin: Any):
@@ -434,7 +534,10 @@ async def handle_probe(plugin: Any):
 def register_webui(plugin: Any, context: Context) -> None:
     routes: list[tuple[str, str, Handler, str]] = [
         ("console/state", "GET", handle_state, "智能过滤控制台状态"),
+        ("console/decisions", "GET", handle_decisions, "搜索群ID、私聊QQ及判定内容"),
         ("console/config", "POST", handle_config, "保存智能过滤参数"),
+        ("console/native-segments", "GET", handle_native_segments, "读取AstrBot原生分段配置"),
+        ("console/native-segments", "POST", handle_save_native_segments, "同步AstrBot原生分段配置"),
         ("console/reset", "POST", handle_reset, "清零智能过滤统计"),
         ("console/probe", "POST", handle_probe, "试跑一次参与判定"),
     ]

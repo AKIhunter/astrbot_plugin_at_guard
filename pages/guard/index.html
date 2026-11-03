@@ -92,14 +92,18 @@
   .mode span { color: var(--muted); font-size: 11.5px; line-height: 1.45; display: block; }
   .row { display: grid; grid-template-columns: minmax(120px, .85fr) minmax(0, 1.3fr); align-items: center; gap: 6px 16px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
   .row:last-child { border-bottom: 0; }
-  .row > label { color: var(--text); font-size: 13px; font-weight: 550; }
+  .field-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .field-title > label { color: var(--text); font-size: 13px; font-weight: 550; min-width: 0; }
+  .field-help-trigger {
+    flex: none; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line);
+    border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer;
+    font: 600 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .field-help-trigger:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .field-help-trigger:active { transform: translateY(1px); }
   .field-control { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .field-control > input, .field-control > select, .field-control > textarea { min-width: 0; flex: 1; }
   .field-control:has(textarea) { grid-column: 1 / -1; }
-  .field-notes { grid-column: 1 / -1; min-width: 0; }
-  .field-desc { color: var(--muted); font-size: 12px; margin: 0; }
-  .field-example { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
-  .field-example b { color: var(--accent); font-weight: 550; margin-right: 4px; }
   .row .val { min-width: 32px; font-variant-numeric: tabular-nums; font-weight: 650; color: var(--accent); }
   .row .val:empty { display: none; }
   .config-heading { margin: 24px 0 14px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px; }
@@ -114,6 +118,22 @@
   .flow-note span { color: var(--muted); }
   .flow-note b { color: var(--text); font-weight: 550; }
   .row.inactive { opacity: .78; }
+  .reply-layout { align-items: start; gap: 16px; }
+  .reply-stack { display: grid; gap: 16px; min-width: 0; }
+  .reply-layout .card { padding: 18px 20px; }
+  .reply-layout .card h2 { font-size: 15px; }
+  .reply-layout .row { grid-template-columns: minmax(0, 1fr) minmax(140px, 1fr); padding: 10px 0; }
+  .reply-layout .field-control:has(input[type="checkbox"]),
+  .reply-layout .native-toggle { justify-content: flex-end; }
+  .native-toggle input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+  .native-wide { grid-column: 1 / -1; }
+  .native-wide textarea { min-height: 76px; font-family: ui-monospace, monospace; }
+  .segment-example { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; font-size: 12px; }
+  .segment-example span { padding: 4px 9px; background: var(--accent-soft); border-radius: 6px; }
+  #nativeSegments details { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 10px; }
+  #nativeSegments summary { color: var(--muted); cursor: pointer; font-size: 12px; }
+  #nativeSegments .actions { justify-content: space-between; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+  #nativeStatus { margin: 0; flex: 1; min-width: 160px; }
   .row[hidden] { display: none; }
   input[type="range"] { width: 100%; accent-color: var(--accent); }
   input[type="number"], input[type="text"], input[type="search"], select, textarea {
@@ -239,6 +259,19 @@
     font-size: 12px; line-height: 1.55;
   }
   .modal-help { width: min(760px, 100%); }
+  .modal-field-help { width: min(560px, 100%); }
+  .field-help-key {
+    display: inline-block; margin-bottom: 10px; color: var(--muted);
+    font: 11px/1.4 ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+    overflow-wrap: anywhere;
+  }
+  .field-help-desc { margin: 0 0 14px; color: var(--text); line-height: 1.7; }
+  .field-help-examples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .field-help-example {
+    margin: 0; padding: 10px 12px; border: 1px solid var(--line-soft);
+    border-radius: 6px; background: var(--bg); color: var(--text); line-height: 1.6;
+  }
+  .field-help-example b { display: block; margin-bottom: 3px; color: var(--accent); font-size: 11.5px; }
   .help-group { margin-bottom: 14px; }
   .help-group:last-child { margin-bottom: 0; }
   .help-group h4 {
@@ -266,6 +299,22 @@
   .save-bar.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
   .save-bar .save-bar-text { flex: 1; font-size: 13px; color: var(--text); }
   .save-bar .save-bar-text b { color: var(--accent); }
+  .save-warning { display: block; font-size: 12px; color: var(--warn); margin-top: 3px; }
+  [hidden] { display: none !important; }
+  .page-tabs {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
+    padding: 4px; margin: 0 0 16px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: var(--panel);
+  }
+  .page-tabs button {
+    border: 0; border-radius: 6px; background: transparent; color: var(--muted);
+    padding: 10px 4px; font: inherit; cursor: pointer;
+  }
+  .page-tabs button[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .timing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .timing-cell { padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; }
+  .timing-cell b { display: block; }
+  .timing-cell small { color: var(--muted); }
   .save-bar button {
     padding: 7px 16px; border-radius: 8px; cursor: pointer;
     font-family: inherit; font-size: 12.5px; border: 1px solid var(--line);
@@ -282,14 +331,17 @@
   .help-search { padding: 10px 16px 0; }
   .help-key { overflow-wrap: anywhere; }
   .help-item .help-name .help-key { display: block; margin: 2px 0 0; color: var(--muted); }
-  .field-notes, .hintline { overflow-wrap: anywhere; }
+  .hintline { overflow-wrap: anywhere; }
   @media (max-width: 880px) {
     body { padding: 16px 12px 120px; }
     .config-columns, .cols-2 { grid-template-columns: 1fr; }
     .card { padding: 14px 16px; }
+    .reply-layout .card { padding: 14px 16px; }
+    .reply-layout .row { grid-template-columns: minmax(0, 1fr) minmax(100px, 1fr); }
     .head .spacer { display: none; }
     .head h1 { flex: 1 0 60%; }
     .row { grid-template-columns: minmax(110px, .8fr) minmax(0, 1fr); gap: 6px 10px; }
+    .field-help-examples { grid-template-columns: 1fr; }
     .modal-mask { padding: 12px; }
     .save-bar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
     .save-bar .save-bar-text { flex-basis: 100%; }
@@ -315,14 +367,15 @@
   <button class="btn primary" id="saveBtn">保存参数</button>
   <span class="msg" id="saveMsg" role="status"></span>
 </div>
+<p class="sub">可独立使用，也可与从绫配套，仅管理回复判定与发送方式。</p>
 
+<nav class="page-tabs" role="tablist" aria-label="控制台页面">
+  <button id="tab-overview" role="tab" aria-controls="panel-overview" aria-selected="true" tabindex="0" data-page="overview">运行概览</button>
+  <button id="tab-settings" role="tab" aria-controls="panel-settings" aria-selected="false" tabindex="-1" data-page="settings">判定设置</button>
+  <button id="tab-reply" role="tab" aria-controls="panel-reply" aria-selected="false" tabindex="-1" data-page="reply">回复与私聊</button>
+</nav>
+<div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
 <div class="grid cols-2">
-  <section class="card">
-    <h2>闸门模式</h2>
-    <p class="sub">日常使用选「硬闸门」。模式与参数改完统一保存。</p>
-    <div class="modes" id="modes"></div>
-  </section>
-
   <section class="card">
     <h2>今日运行</h2>
     <p class="sub" id="todaySub">—</p>
@@ -332,14 +385,46 @@
       <span class="msg" id="resetMsg"></span>
     </div>
   </section>
+  <section class="card">
+    <h2>分数分布与阈值扫描</h2>
+    <p class="sub" id="distSub">参与适合度分布；分数达标之外，还需理解上下文且没有否决原因。</p>
+    <div class="hist" id="hist"></div><div class="axis" id="axis"></div>
+    <div class="kv" id="distKv"></div><div class="chips" id="chips"></div>
+  </section>
+</div>
+<p class="msg">普通参数保存会保留统计与日志。今日计数每天重新统计；只有手动点击「清零统计」才清零计数。</p>
+<section class="card" id="records">
+  <div class="card-head-row">
+    <h2>最近判定</h2>
+    <input id="decisionSearch" type="search" maxlength="120" aria-label="搜索群ID、私聊QQ、原话或上下文" placeholder="群ID / 私聊QQ / 原话…" autocomplete="off" />
+  </div>
+  <p class="sub" id="decisionSearchStatus" role="status">默认展示最近100条；搜索覆盖已恢复的最近600条记录。</p>
+  <p class="sub">看分数、静默原因及实际判定模型；点「详情」查看当时的上下文。发送前取消会单独记录。</p>
+  <div class="scroll" tabindex="0" role="region" aria-label="最近判定记录，可横向滚动">
+    <table>
+      <thead>
+        <tr><th>序号</th><th>时间</th><th>会话</th><th>分数</th><th>阈值</th><th>决定</th><th>原因 / 模型</th><th>耗时</th><th>判断说明</th></tr>
+      </thead>
+      <tbody id="decisions"><tr><td colspan="9" class="empty">暂无记录</td></tr></tbody>
+    </table>
+  </div>
+</section>
 </div>
 
+<div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+<section class="card">
+  <div class="field-title">
+    <h2>闸门模式</h2>
+    <button class="field-help-trigger" type="button" data-config-help="gate_mode" aria-label="查看闸门模式详情和示例" title="查看详情和示例">?</button>
+  </div>
+  <p class="sub">日常使用选「硬闸门」。模式与参数改完统一保存。</p>
+  <div class="modes" id="modes"></div>
+</section>
 <div class="config-heading">
-  <div><h2>参数配置</h2><p>每项下方都有用途和例子；例子仅帮助理解，不会替你修改配置。</p></div>
+  <div><h2>判定参数</h2><p>修改后影响新的判断；已有运行记录保留。切换页面不会丢失未保存的更改。</p></div>
   <nav class="section-links" aria-label="参数分组">
     <a href="#participation">参与判断</a><a href="#vision">图片兜底</a>
     <a href="#context">上下文</a><a href="#budget">预算时限</a>
-    <a href="#rhythm">回复节奏</a><a href="#mentions">称呼私聊</a>
   </nav>
 </div>
 <div class="config-columns">
@@ -366,61 +451,70 @@
       <p class="sub">限制每群的模型调用次数和等待时间。</p>
       <div id="budgetFields"></div>
     </section>
+</div>
+<section class="card" style="margin-top:14px">
+  <h2>文字试跑</h2>
+  <p class="sub">只返回判断，不发送消息。使用已保存的参数；不计入统计与预算，但会产生模型 API 用量。</p>
+  <div class="probe">
+    <label for="probeText" class="msg">待判断的消息</label>
+    <textarea id="probeText" placeholder="粘贴一条群消息，例如：这个门派怎么加点"></textarea>
+    <label for="probeBot" class="msg">机器人上一句（可选）</label>
+    <input id="probeBot" type="text" placeholder="（可选）机器人上一句说了什么" />
+    <div class="actions" style="margin-top:0">
+      <button class="btn primary" id="probeBtn">判定一下</button>
+      <span class="msg" id="probeMsg" role="status"></span>
+    </div>
+    <div class="probe-out" id="probeOut"></div>
+  </div>
+</section>
+</div>
+
+<div id="panel-reply" role="tabpanel" aria-labelledby="tab-reply" hidden>
+<div class="config-heading">
+  <div><h2>回复与私聊</h2><p>引用、@与清理按开关生效；分段与AstrBot共用配置。点击 ? 查看示例。</p></div>
+  <nav class="section-links" aria-label="回复分组"><a href="#expression">回复方式</a><a href="#nativeSegments">原生分段</a><a href="#rhythm">回复节奏</a><a href="#recall">撤回保护</a><a href="#mentions">称呼私聊</a><a href="#understanding">内容理解</a></nav>
+</div>
+<div class="config-columns reply-layout">
+  <div class="reply-stack">
+    <section class="card" id="expression">
+      <h2>回复方式</h2><p class="sub">引用和@可同时开启，首条正文带头。表情包由其他插件管理。</p>
+      <div id="expressionFields"></div>
+    </section>
     <section class="card" id="rhythm">
-      <h2><span class="section-number">05</span>回复节奏</h2>
+      <h2>回复节奏</h2>
       <p class="sub">控制等待、冷却和重复回复。</p>
       <div id="replyFields"></div>
       <div class="flow-note" id="conglingCompat" role="status"></div>
     </section>
     <section class="card" id="mentions">
-      <h2><span class="section-number">06</span>称呼、空 @ 与私聊</h2>
+      <h2>称呼、空 @ 与私聊</h2>
       <p class="sub">明确叫机器人时怎么回应，是否过滤私聊。</p>
       <div id="mentionFields"></div>
     </section>
+  </div>
+  <div class="reply-stack">
+    <section class="card" id="nativeSegments">
+      <h2>原生分段回复</h2>
+      <p class="sub">与AstrBot「扩展功能 → 分段回复」共用配置，修改后点击页面底部保存。</p>
+      <label id="nativeProfileLabel" class="row" hidden>原生配置 <select id="nativeProfile" aria-label="原生配置"></select></label>
+      <div id="nativeSegmentFields"></div>
+      <p class="sub">第二句号开启：每段跳过第一个“。”，第二个“。”断开；其他分段词照常断开。</p>
+      <div class="segment-example" aria-label="第二句号断句示例"><span>甲。乙。</span><span>丙！</span><span>丁。戊。</span></div>
+      <details><summary>原生高级参数</summary><div id="nativeSegmentAdvanced"></div></details>
+      <div class="actions"><p class="msg" id="nativeStatus" role="status">读取中…</p><button class="btn" id="nativeReload">重新读取</button></div>
+    </section>
+    <section class="card" id="recall">
+      <h2>撤回保护</h2><p class="sub">不增加处理前等待。群聊和私聊都开启即全局保护。</p>
+      <div id="recallFields"></div>
+    </section>
+    <section class="card" id="understanding">
+      <h2>内容理解（独立模式）</h2><p class="sub" id="understandingMode">当前会话启用从绫时，由从绫原生感知处理；以下设置仅用于独立模式。</p>
+      <div id="understandingFields"></div>
+    </section>
+  </div>
+</div>
 </div>
 
-<div class="config-heading">
-  <div><h2>试跑与运行记录</h2><p>先用文字试跑确认结果，再参考真实判定分布。</p></div>
-</div>
-<div class="grid cols-2">
-  <section class="card">
-    <h2>分数分布与阈值扫描</h2>
-    <p class="sub" id="distSub">参与适合度分布；分数达标之外，还需理解上下文且没有否决原因。</p>
-    <div class="hist" id="hist"></div><div class="axis" id="axis"></div>
-    <div class="kv" id="distKv"></div><div class="chips" id="chips"></div>
-  </section>
-  <section class="card">
-    <h2>文字试跑</h2>
-    <p class="sub">只返回判断，不发送消息。不计入插件统计与预算，但会产生模型 API 用量；此处不上传图片。</p>
-    <div class="probe">
-      <label for="probeText" class="msg">待判断的消息</label>
-      <textarea id="probeText" placeholder="粘贴一条群消息，例如：这个门派怎么加点"></textarea>
-      <label for="probeBot" class="msg">机器人上一句（可选）</label>
-      <input id="probeBot" type="text" placeholder="（可选）机器人上一句说了什么" />
-      <div class="actions" style="margin-top:0">
-        <button class="btn primary" id="probeBtn">判定一下</button>
-        <span class="msg" id="probeMsg" role="status"></span>
-      </div>
-      <div class="probe-out" id="probeOut"></div>
-    </div>
-  </section>
-</div>
-
-<section class="card" style="margin-top:14px">
-  <div class="card-head-row">
-    <h2>最近判定</h2>
-    <input id="decisionSearch" type="text" aria-label="搜索最近判定的原话和上下文" placeholder="搜索原话或上下文…" autocomplete="off" />
-  </div>
-  <p class="sub">看分数、静默原因及实际判定模型；点「详情」查看当时的上下文。静默表示未生成回复，主模型可能已用于图片异常兜底；发送前取消会单独记录。</p>
-  <div class="scroll" tabindex="0" role="region" aria-label="最近判定记录，可横向滚动">
-    <table>
-      <thead>
-        <tr><th>序号</th><th>时间</th><th>群</th><th>分数</th><th>阈值</th><th>决定</th><th>原因 / 模型</th><th>耗时</th><th>判断说明</th></tr>
-      </thead>
-      <tbody id="decisions"><tr><td colspan="9" class="empty">暂无记录</td></tr></tbody>
-    </table>
-  </div>
-</section>
 </main>
 
 <div class="modal-mask" id="rawModal">
@@ -446,8 +540,19 @@
   </div>
 </div>
 
+<div class="modal-mask" id="fieldHelpModal">
+  <div class="modal modal-field-help" role="dialog" aria-modal="true" aria-labelledby="fieldHelpTitle" tabindex="-1">
+    <div class="modal-head">
+      <h3 id="fieldHelpTitle">配置详情</h3>
+      <span class="spacer"></span>
+      <button class="modal-close" id="fieldHelpModalClose">关闭</button>
+    </div>
+    <div class="modal-body" id="fieldHelpModalBody"></div>
+  </div>
+</div>
+
 <div class="save-bar" id="saveBar">
-  <span class="save-bar-text" id="saveBarText">有改动未保存</span>
+  <span class="save-bar-text"><span id="saveBarText" aria-live="polite">有改动未保存</span><span id="saveWarning" class="save-warning" role="status" hidden></span></span>
   <button class="danger" id="saveBarDiscard">放弃更改</button>
   <button class="primary" id="saveBarSave">保存更新</button>
 </div>
@@ -459,7 +564,141 @@
   let bridge = null;
   const resolveBridge = () => (window.AstrBotPluginView || window.AstrBotPluginPage || null);
   const el = (id) => document.getElementById(id);
-  const state = { data: null, mode: "enforce", draft: {}, dirty: new Set(), q: "" };
+  const state = { data: null, mode: "enforce", draft: {}, dirty: new Set(), q: "", searchRows: null, saving: false };
+  let nativeData = null, nativeDraft = {}, nativeSaving = false, nativeLoading = false;
+  const NATIVE_FIELDS = [
+    ["enable", "启用分段回复", "bool"],
+    ["second_period", "第二句号", "bool"],
+    ["split_words", "分段词（每行一个）", "words"],
+    ["split_mode", "分段方式", [["regex", "正则断句"], ["words", "分段词"]], true],
+    ["regex", "断句正则", "text", true],
+    ["only_llm_result", "仅对模型结果分段", "bool", true],
+    ["words_count_threshold", "超过此字数不拆分", "number", true],
+    ["content_cleanup_rule", "原生分段文本清理正则", "text", true],
+  ];
+  function renderNative() {
+    if (!nativeData) return;
+    const focusId = document.activeElement?.id;
+    el("nativeSegmentFields").replaceChildren();
+    el("nativeSegmentAdvanced").replaceChildren();
+    NATIVE_FIELDS.forEach(([key, title, kind, advanced]) => {
+      const value = Object.hasOwn(nativeDraft, key) ? nativeDraft[key] : nativeData.values[key];
+      const mode = nativeDraft.split_mode ?? nativeData.values.split_mode;
+      const second = nativeDraft.second_period ?? nativeData.values.second_period;
+      if ((key === "regex" && (mode !== "regex" || second)) || (key === "split_mode" && second)) return;
+      const row = document.createElement("div"); row.className = "row";
+      const label = document.createElement("label"); label.textContent = title; label.htmlFor = "native-" + key;
+      const input = document.createElement(Array.isArray(kind) ? "select" : kind === "words" ? "textarea" : "input");
+      input.id = "native-" + key;
+      if (Array.isArray(kind)) kind.forEach(([v, text]) => {
+        const option = new Option(text, v); input.add(option);
+      });
+      else if (kind !== "words") input.type = kind === "bool" ? "checkbox" : kind;
+      if (kind === "bool") input.checked = value;
+      else input.value = kind === "words" ? value.join("\n") : value;
+      if (kind === "number") { input.min = key === "log_base" ? "1.01" : "0"; input.step = key === "log_base" ? "0.1" : "1"; }
+      input.disabled = nativeSaving || nativeLoading || state.saving;
+      input.addEventListener(kind === "bool" || Array.isArray(kind) ? "change" : "input", () => {
+        const next = kind === "bool" ? input.checked : kind === "number" ? Number(input.value)
+          : kind === "words" ? input.value.split("\n").filter(s => s !== "") : input.value;
+        if (JSON.stringify(next) === JSON.stringify(nativeData.values[key])) delete nativeDraft[key];
+        else nativeDraft[key] = next;
+        el("nativeStatus").textContent = Object.keys(nativeDraft).length
+          ? "分段有未保存更改，底部保存后两边生效" : "与AstrBot原生配置一致";
+        el("nativeStatus").className = "msg";
+        el("nativeProfile").disabled = Object.keys(nativeDraft).length > 0;
+        showSaveBar();
+        if (key === "split_mode" || key === "second_period") renderNative();
+      });
+      const cell = document.createElement("div");
+      cell.className = kind === "bool" ? "native-toggle switch" : "field-control";
+      if (kind === "words" || key === "regex") cell.classList.add("native-wide");
+      cell.append(input);
+      row.append(label, cell);
+      el(advanced ? "nativeSegmentAdvanced" : "nativeSegmentFields").append(row);
+    });
+    const profile = el("nativeProfile");
+    profile.replaceChildren(...nativeData.profiles.map(p => new Option(p.name, p.id)));
+    profile.value = nativeData.config_id;
+    profile.disabled = nativeSaving || nativeLoading || state.saving || Object.keys(nativeDraft).length > 0;
+    el("nativeProfileLabel").hidden = nativeData.profiles.length <= 1;
+    if (focusId?.startsWith("native-") && !el(focusId)?.disabled) el(focusId)?.focus({preventScroll:true});
+  }
+  async function loadNative(configId = nativeData?.config_id || "default") {
+    if (nativeSaving || nativeLoading || state.saving) return;
+    nativeLoading = true;
+    renderNative();
+    try {
+      // 页面桥禁止端点携带?，查询参数必须独立传递。
+      const data = await apiGet("console/native-segments", { config_id: configId });
+      nativeData = data;
+      Object.keys(nativeDraft).forEach(key => {
+        if (JSON.stringify(nativeDraft[key]) === JSON.stringify(data.values[key])) delete nativeDraft[key];
+      });
+      renderNative();
+      showSaveBar();
+      el("nativeStatus").textContent = Object.keys(nativeDraft).length
+        ? "已重新读取原生设置，保留你的分段草稿；保存将更新这些字段。"
+        : "已读取AstrBot原生配置 · " + (data.values.enable ? "分段开启" : "分段关闭");
+      el("nativeStatus").className = "msg";
+    } catch (err) {
+      el("nativeStatus").textContent = "读取失败：" + err.message;
+      el("nativeStatus").className = "msg err";
+    } finally {
+      nativeLoading = false;
+      renderNative();
+    }
+  }
+  async function saveNative() {
+    if (!nativeData || !Object.keys(nativeDraft).length || nativeSaving) return;
+    nativeSaving = true;
+    el("nativeReload").disabled = true;
+    renderNative();
+    try {
+      nativeData = await apiPost("console/native-segments", {
+        config_id: nativeData.config_id, expected_revision: nativeData.revision, values: nativeDraft
+      });
+      nativeDraft = {};
+      el("nativeStatus").textContent = "已保存并同步AstrBot原生分段回复";
+      el("nativeStatus").className = "msg ok";
+    } catch (err) {
+      el("nativeStatus").textContent = "保存失败：" + err.message;
+      el("nativeStatus").className = "msg err";
+      throw err;
+    } finally {
+      nativeSaving = false;
+      el("nativeReload").disabled = state.saving;
+      renderNative();
+      showSaveBar();
+    }
+  }
+  let searchSequence = 0;
+  function selectPage(name, focus = false) {
+    const oldRecords = name === "records";
+    if (oldRecords) name = "overview";
+    if (!el("panel-" + name)) return;
+    document.querySelectorAll(".page-tabs button").forEach(btn => {
+      const active = btn.dataset.page === name;
+      btn.setAttribute("aria-selected", String(active));
+      btn.tabIndex = active ? 0 : -1;
+      el("panel-" + btn.dataset.page).hidden = !active;
+      if (active && focus) btn.focus();
+    });
+    // 宿主可能注入base；只改当前URL的锚点，避免切页把页面路径改成资源目录。
+    const pageUrl = new URL(location.href);
+    pageUrl.hash = "page-" + name;
+    history.replaceState(null, "", pageUrl.href);
+    if (oldRecords) el("records").scrollIntoView();
+  }
+  function followHash() {
+    const hash = location.hash.slice(1);
+    if (hash === "records") selectPage("records");
+    else if (hash.startsWith("page-")) selectPage(hash.slice(5));
+    else if (el(hash)?.closest('[role="tabpanel"]')) {
+      selectPage(el(hash).closest('[role="tabpanel"]').id.replace("panel-", ""));
+      el(hash).scrollIntoView();
+    }
+  }
 
   function detectTheme() {
     try {
@@ -530,7 +769,7 @@
     enforce: "硬闸门：静默时不生成回复；视觉异常可使用主模型做一次判定",
     shadow: "观察模式：只记录不拦截，用来校准阈值",
     legacy: "旧行为：先生成再丢弃，仅回滚时用",
-    off: "完全解耦：插件不介入任何消息",
+    off: "关闭参与判断；表达、模拟耗时和撤回保护分别控制",
   };
 
   const GATE_FIELDS = [
@@ -559,10 +798,35 @@
   ];
   const REPLY_FIELDS = [
     { key: "fragment_wait_seconds", label: "碎片消息等待", type: "number", min: 0, max: 5, step: 0.1, unit: "秒" },
+    { key: "fragment_wait_private", label: "私聊也等待碎片", type: "bool" },
     { key: "proactive_cooldown_seconds", label: "主动回复冷却", type: "number", min: 0, max: 60, step: 0.1, unit: "秒" },
     { key: "duplicate_window_seconds", label: "相同消息去重", type: "number", min: 0, max: 3600, step: 1, unit: "秒" },
     { key: "gate_reply_max_age_seconds", label: "回复机会有效期", type: "number", min: 5, max: 120, step: 1, unit: "秒" },
     { key: "gate_congling_prepare_compat", label: "从绫爬楼配套", type: "bool" },
+    { key: "reply_typing_enabled", label: "模拟回复耗时", type: "bool" },
+    { key: "reply_typing_chars_per_second", label: "模拟打字速度", type: "number", min: 0.5, max: 20, step: 0.1, unit: "字/秒" },
+  ];
+  const EXPRESSION_FIELDS = [
+    { key: "expression_takeover_enabled", label: "启用回复方式管理", type: "bool" },
+    { key: "reply_quote_enabled", label: "引用当前消息", type: "bool" },
+    { key: "reply_mention_enabled", label: "@当前发送者", type: "bool" },
+    { key: "expression_strip_emoji", label: "清理文本Emoji和颜文字", type: "bool" },
+  ];
+  const UNDERSTANDING_FIELDS = [
+    { key: "understand_expand_forward", label: "展开合并转发", type: "bool" },
+    { key: "understand_forward_max_nodes", label: "最多展开条数", type: "number", min: 1, max: 300, step: 1, unit: "条" },
+    { key: "understand_forward_max_depth", label: "转发最大层数", type: "number", min: 0, max: 8, step: 1, unit: "层" },
+    { key: "understand_forward_summary_threshold", label: "转发摘要阈值", type: "number", min: 100, max: 12000, step: 100, unit: "字" },
+    { key: "understand_quote_depth", label: "引用链展开层数", type: "number", min: 0, max: 8, step: 1, unit: "层" },
+    { key: "understand_card_parse", label: "解析卡片和小程序", type: "bool" },
+    { key: "understand_image_enabled", label: "图片理解", type: "bool" },
+    { key: "understand_image_provider_id", label: "图片理解模型", type: "provider", role: "vision" },
+    { key: "understand_voice_enabled", label: "语音转文字理解", type: "bool" },
+    { key: "understand_voice_provider_id", label: "语音理解模型", type: "provider", role: "speech" },
+  ];
+  const RECALL_FIELDS = [
+    { key: "reply_recall_group", label: "群聊撤回消息不回复", type: "bool" },
+    { key: "reply_recall_private", label: "私聊撤回消息不回复", type: "bool" },
   ];
   const MENTION_FIELDS = [
     { key: "bot_names", label: "机器人称呼", type: "list", placeholder: "恰比姐, 恰比" },
@@ -572,7 +836,7 @@
     { key: "apply_to_private", label: "过滤私聊", type: "bool" },
   ];
 
-  // 就地说明、搜索手册共享同一份文案，避免新参数只更新其中一处。
+  // 标题问号和搜索手册共享同一份文案，避免新参数只更新其中一处。
   const FIELD_HELP = {
     participation_confidence_threshold: { desc: "参与适合度至少达到这个分数才有机会放行；还需理解话题，并且没有静默否决。", ex: "设 50：理解清楚且适合度 75 可放行；对方说「别继续了」仍静默。设 0 也不会取消静默否决。" },
     classifier_provider_id: { desc: "负责先判断是否接话的文字小模型，不负责写回复。留空会跟随会话主模型。", ex: "选择「Qwen/Qwen3-8B（锁定上游）」：日常文字判断固定用它。" },
@@ -590,17 +854,58 @@
     gate_hourly_budget: { desc: "每群每小时判定调用的总上限；文字、看图、兜底及记忆复判都计入。0 表示不限。", ex: "设 120 次：一条消息若用了文字和看图两层，就占 2 次，而不是 1 条消息。" },
     gate_vision_hourly_budget: { desc: "每群的多模态和主模型兜底共用此上限，同时仍受总判定上限约束。0 表示不限这一项。", ex: "设 20 次：看图 1 次再兜底 1 次，共占 2 次；用完后保持静默。" },
     gate_total_timeout_seconds: { desc: "整条判定流程的总时限，包含文字、看图、兜底和背景检索；不含碎片等待及回复生成。", ex: "设 18 秒：即使各模型都有剩余时间，整条判定超过 18 秒也会停止。" },
-    fragment_wait_seconds: { desc: "普通自主回复先等一会儿，收集紧随其后的碎片消息。0 表示不等。明确呼叫不等待。", ex: "设 1.2 秒：有人连续发「我想问」和「怎么加点」，尽量一起参考；会增加等待时间。" },
+    fragment_wait_seconds: { desc: "明确 @、引用机器人、称呼唤醒和普通群聊都等待。同一会话、同一用户每次续发重置倒计时，安静结束后整批统一判断；其他用户不重置。0关闭。", ex: "设3秒：第0秒@机器人，第2秒发「我想问」，第4秒发「怎么加点」；第7秒一起判断，只产生一次回复机会。" },
+    fragment_wait_private: { desc: "开启后私聊也按同用户续发重置碎片等待；默认关闭，与「过滤私聊」独立。", ex: "开启且等待3秒：连续私聊合并理解；关闭「过滤私聊」时照常直接交给主模型，不额外判参与分数。" },
     proactive_cooldown_seconds: { desc: "上次主动回复后，同群在这段时间内不再主动接话。0 表示关闭冷却。", ex: "设 8 秒：机器人刚主动说完，接下来 8 秒不连续抢话。" },
     duplicate_window_seconds: { desc: "近期已回复的相同文字，在同群的这段时间里不重复回复。0 表示关闭去重。", ex: "设 60 秒：同群一分钟内再次问相同的「怎么下载」，避免重复回答。" },
     gate_reply_max_age_seconds: { desc: "自主回复的等待、判定和生成受此时限约束；从绫配套开启时只扣除已上报的实际准备耗时，新消息仍取消旧回复。", ex: "设30秒：收到后60秒，爬楼准备占45秒，剩余已用15秒可继续；总计80秒则净用35秒，会过期。" },
     gate_congling_prepare_compat: { desc: "新版从绫上报爬楼/补课准备秒数后，扣除它对回复有效期的占用；无有效上报时保持原规则。", ex: "开启：先通过at_guard，再从绫读历史，最后回复当前问题；关闭则爬楼也占有效期。从绫人格钩子须晚于闸门执行。" },
-    bot_names: { desc: "消息以这些名字开头时，视为明确叫机器人，跳过自主参与判定。名称用逗号分隔。", ex: "填「恰比姐，恰比」：「恰比 在吗」会明确唤醒；修改称呼后重载插件以更新框架前缀。" },
-    empty_mention_mode: { desc: "只 @ 机器人、没有具体内容时，选固定一句话，或让当前会话人格生成。", ex: "固定文案：直接回「嗯？有事就说。」；按人格生成：不同会话用各自人格回应。" },
+    bot_names: { desc: "消息以这些名字开头时，视为明确叫机器人，免主动冷却。开启碎片等待时仍合并判断，等待设0时直接放行。名称用逗号分隔。", ex: "填「恰比姐，恰比」：「恰比 在吗」会明确唤醒；修改称呼后重载插件以更新框架前缀。" },
+    empty_mention_mode: { desc: "碎片等待结束后，整批仍只有 @、没有具体内容时，选固定一句话或沿用当前会话人格生成；后补问题则合并判断。", ex: "先@、2秒后补「怎么加点」：不会先发「嗯？」；没有后补内容时再按所选方式回应。" },
     empty_mention_reply: { desc: "只在「固定文案」模式生效，不调用模型。", ex: "填「在呢，怎么啦？」：群友只 @ 机器人时直接发送这一句。" },
     empty_mention_persona_prompt: { desc: "只在「按人格生成」模式生效，补充简短回应要求；人格身份沿用当前会话。", ex: "填「用当前人格的口吻，简短回应一句，不编造用户意图」。" },
-    apply_to_private: { desc: "开启后私聊也受参与判断约束；关闭时本插件跳过私聊，仍由 AstrBot 其他设置决定回复。", ex: "关闭：私聊不被本插件的阈值拦住；开启：私聊理解不清时也可能静默。" },
+    apply_to_private: { desc: "开启后私聊也受参与判断约束；关闭仅跳过参与判断，碎片等待、表达与撤回由独立开关控制。", ex: "关闭：私聊不被本插件的阈值拦住；开启：私聊理解不清时也可能静默。" },
   };
+  const FIELD_EXAMPLE_2 = {
+    participation_confidence_threshold: "设 80：机器人只在明确被邀请、上下文完整且参与价值很高时主动接话。",
+    classifier_provider_id: "留空：不同会话会跟随各自主模型，成本和评分尺度可能随会话变化。",
+    classifier_timeout_seconds: "设 1 秒：网络稍慢就会静默，适合低延迟优先但可能漏掉正常消息。",
+    gate_min_length: "设 0：关闭短句过滤，「嗯」「好」也会进入模型判断，但不代表一定回复。",
+    vision_provider_id: "留空并关闭主模型兜底：文字判断确认必须看图时，本次保持静默。",
+    gate_image_cache_ttl_seconds: "设 0：相同图片每次都重新识别，模型调用更多，但不会复用旧摘要。",
+    vision_timeout_seconds: "设 10 秒：给看图模型更多时间，代价是图片消息的判定等待更长。",
+    gate_main_fallback_enabled: "关闭：多模态调用失败后直接静默，不再让会话主模型重复看图。",
+    gate_main_fallback_timeout_seconds: "设 2 秒：兜底模型响应较慢时会更快静默，减少整条链路等待。",
+    gate_context_messages: "设 4 条：降低输入 Token，但较长对话中的指代更容易缺少背景。",
+    gate_context_max_age_seconds: "设 60 秒：只认最近一分钟的对话，适合话题切换很快的群。",
+    gate_memory_timeout_seconds: "设 3 秒：允许记忆检索等待更久，但整条判定仍受总时限约束。",
+    participation_context_messages: "设 6 条：回复模型只补最近 6 条群聊，不影响前面的参与判定。",
+    gate_hourly_budget: "设 0：不设独立总预算，仍受超时和视觉预算等其它限制。",
+    gate_vision_hourly_budget: "设 0：不限制视觉层次数，但每次看图仍计入总判定预算。",
+    gate_total_timeout_seconds: "设 8 秒：文字、记忆和图片链路合计超过 8 秒就终止并静默。",
+    fragment_wait_seconds: "设 0：关闭碎片合并，明确呼叫会立即继续处理，可能抢在用户补充问题前回复。",
+    fragment_wait_private: "关闭：群聊仍等待碎片，私聊消息则不经过这段合并等待。",
+    proactive_cooldown_seconds: "设 0：取消主动回复冷却，多人连续发言时机器人可能更频繁参与。",
+    duplicate_window_seconds: "设 0：关闭相同文字去重，同群重复问题可再次触发回复。",
+    gate_reply_max_age_seconds: "设 10 秒：生成较慢的主动回复更容易过期；明确呼叫不受此项限制。",
+    gate_congling_prepare_compat: "未安装新版从绫时保持开启也不会凭空扣时，仍按原有效期判断。",
+    bot_names: "填「小绫」：以「小绫，帮我看看」开头的群消息会被视为明确唤醒。",
+    empty_mention_mode: "选择按人格生成：只有空 @ 时调用当前会话模型，若后续补了问题则合并正常处理。",
+    empty_mention_reply: "填「我在，继续说」：只 @ 没有正文时直接发送，不产生模型费用。",
+    empty_mention_persona_prompt: "要求「只回一句，不使用表情」：仍沿用当前会话人格，只约束本次空 @ 回应。",
+    apply_to_private: "开启：私聊同样经过参与评分；碎片等待是否开启仍由独立私聊开关决定。",
+  };
+  const MODE_CONFIG_HELP = {
+    desc: "控制参与判断是否拦截消息。日常使用硬闸门；观察模式用于校准；关闭判断不会自动关闭回复方式、模拟耗时或撤回保护。",
+    examples: [
+      "日常运行选硬闸门：判定静默时不生成回复，可以直接节省主模型调用。",
+      "更换判定模型后先用观察模式看分数分布，确认阈值后再切回硬闸门。",
+    ],
+  };
+  function helpExamples(key, help) {
+    if (Array.isArray(help.examples)) return help.examples.slice(0, 2);
+    return [help.ex, FIELD_EXAMPLE_2[key] || "保持默认值：沿用当前推荐行为。"];
+  }
   const FIELD_GROUPS = [
     { id: "gateFields", title: "参与判断", fields: GATE_FIELDS },
     { id: "visionFields", title: "图片与主模型兜底", fields: VISION_FIELDS },
@@ -608,7 +913,12 @@
     { id: "budgetFields", title: "预算与判定时限", fields: BUDGET_FIELDS },
     { id: "replyFields", title: "回复节奏", fields: REPLY_FIELDS },
     { id: "mentionFields", title: "称呼、空 @ 与私聊", fields: MENTION_FIELDS },
+    { id: "expressionFields", title: "回复方式", fields: EXPRESSION_FIELDS },
+    { id: "understandingFields", title: "看得懂什么", fields: UNDERSTANDING_FIELDS },
+    { id: "recallFields", title: "撤回保护", fields: RECALL_FIELDS },
   ];
+  const POLICY_KEYS = new Set(["gate_mode",
+    ...GATE_FIELDS.map(f=>f.key), ...VISION_FIELDS.map(f=>f.key), ...CONTEXT_FIELDS.map(f=>f.key)]);
 
   function themeModeBadge(mode) {
     const badge = el("modeBadge");
@@ -618,18 +928,26 @@
 
   function setDirty(key, value) {
     state.draft[key] = value;
-    state.dirty.add(key);
-    el("dirtyMsg").textContent = "有 " + state.dirty.size + " 项未保存";
+    if (JSON.stringify(value) === JSON.stringify(state.data.config[key])) {
+      state.dirty.delete(key); delete state.draft[key];
+    } else state.dirty.add(key);
+    el("dirtyMsg").textContent = state.dirty.size ? "有 " + state.dirty.size + " 项未保存" : "";
     el("dirtyMsg").className = "msg";
     showSaveBar();
   }
 
   function showSaveBar() {
-    const n = state.dirty.size;
+    const n = state.dirty.size + Object.keys(nativeDraft).length;
+    if (!n) { hideSaveBar(); return; }
     el("saveBarText").innerHTML = n
-      ? "有 <b>" + n + "</b> 项更改未保存"
+      ? "有 <b>" + n + "</b> 项更改未保存" + (Object.keys(nativeDraft).length ? " · 分段保存后两边生效" : "")
       : "有更改未保存";
     el("saveBar").classList.add("show");
+    const changed = FIELD_GROUPS.slice(0,3).filter(g=>g.fields.some(f=>state.dirty.has(f.key))).map(g=>g.title);
+    if (state.dirty.has("gate_mode") && !changed.includes("参与判断")) changed.unshift("参与判断");
+    el("saveWarning").hidden = !changed.length;
+    el("saveWarning").textContent = changed.length
+      ? "警示：已调整「" + changed.join("、") + "」，保存后判定口径会变化；旧统计与运行记录仍保留。" : "";
   }
 
   function hideSaveBar() {
@@ -645,7 +963,7 @@
       btn.type = "button";
       btn.dataset.mode = mode;
       btn.setAttribute("aria-pressed", state.mode === mode ? "true" : "false");
-      btn.innerHTML = "<b>" + esc(({enforce:"硬闸门",shadow:"观察模式",legacy:"旧行为",off:"完全解耦"})[mode]) + "</b><span>" + esc(MODE_HINT[mode]) + "</span>";
+      btn.innerHTML = "<b>" + esc(({enforce:"硬闸门",shadow:"观察模式",legacy:"旧行为",off:"关闭判断"})[mode]) + "</b><span>" + esc(MODE_HINT[mode]) + "</span>";
       btn.addEventListener("click", () => {
         state.mode = mode;
         setDirty("gate_mode", mode);
@@ -690,6 +1008,16 @@
     const label = document.createElement("label");
     label.textContent = field.label;
     label.htmlFor = "field-" + field.key;
+    const title = document.createElement("div");
+    title.className = "field-title";
+    const helpButton = document.createElement("button");
+    helpButton.type = "button";
+    helpButton.className = "field-help-trigger";
+    helpButton.textContent = "?";
+    helpButton.title = "查看详情和示例";
+    helpButton.setAttribute("aria-label", "查看" + field.label + "详情和示例");
+    helpButton.addEventListener("click", () => openFieldHelp(field.key, field.label));
+    title.append(label, helpButton);
     const cell = document.createElement("div");
     cell.className = "field-control";
     const out = document.createElement("div");
@@ -748,11 +1076,16 @@
       const select = document.createElement("select");
       const follow = document.createElement("option");
       follow.value = "";
-      follow.textContent = field.key === "vision_provider_id"
-        ? "未配置（按兜底开关处理）" : "跟随会话当前模型（不推荐）";
+      follow.textContent = field.key === "vision_provider_id" ? "未配置（按兜底开关处理）"
+        : field.role === "tts" ? "跟随会话原生TTS"
+        : field.role === "speech" ? "跟随会话原生STT"
+        : "跟随会话当前模型";
       select.appendChild(follow);
       (state.data.providers || []).filter(p =>
-        field.key !== "vision_provider_id" || p.supports_images === true).forEach((p) => {
+        field.role === "tts" ? p.role === "tts"
+        : field.role === "speech" ? p.supports_audio === true
+        : field.role === "vision" || field.key === "vision_provider_id" ? p.supports_images === true
+        : !p.role || p.role === "chat").forEach((p) => {
         const opt = document.createElement("option");
         if (p.kind === "router_upstream") {
           // 路由下的具体上游模型：锁定后跳过优先级自动降级，直连该模型。
@@ -811,7 +1144,9 @@
         ? (input.checked ? "视觉异常时兜底一次" : "视觉异常则静默")
         : field.key === "gate_congling_prepare_compat"
         ? (input.checked ? "扣除已上报的爬楼准备时间" : "按原始总耗时检查")
-        : (input.checked ? "私聊也走判定" : "私聊直接放行");
+        : field.key === "apply_to_private" ? (input.checked ? "私聊也走判定" : "私聊直接放行")
+        : field.key === "expression_takeover_enabled" ? (input.checked ? "主回复按本页方式发送" : "使用从绫或宿主的原生方式")
+        : (input.checked ? "已开启" : "已关闭");
       tip.textContent = boolHint();
       input.addEventListener("change", () => {
         setDirty(field.key, input.checked);
@@ -824,34 +1159,18 @@
       cell.appendChild(wrap);
     }
 
-    row.appendChild(label);
+    row.appendChild(title);
     row.appendChild(cell);
     cell.appendChild(out);
     const control = cell.querySelector("input, select, textarea");
     control.id = "field-" + field.key;
-    control.setAttribute("aria-describedby", "notes-" + field.key);
-    const notes = document.createElement("div");
-    notes.className = "field-notes";
-    notes.id = "notes-" + field.key;
-    const help = FIELD_HELP[field.key];
-    const desc = document.createElement("p");
-    desc.className = "field-desc";
-    desc.textContent = help.desc;
-    const example = document.createElement("p");
-    example.className = "field-example";
-    const exampleLabel = document.createElement("b");
-    exampleLabel.textContent = "例";
-    example.appendChild(exampleLabel);
-    example.appendChild(document.createTextNode(help.ex));
-    notes.appendChild(desc);
-    notes.appendChild(example);
     const providerNote = row.querySelector(".hintline");
-    if (providerNote) notes.appendChild(providerNote);
-    row.appendChild(notes);
+    if (providerNote) row.appendChild(providerNote);
     host.appendChild(row);
   }
 
   function renderFields() {
+    Object.assign(FIELD_HELP, state.data.fieldHelp || {});
     const cfg = state.data.config || {};
     FIELD_GROUPS.forEach(({id, fields}) => {
       const host = el(id);
@@ -876,6 +1195,9 @@
     else if(status.order==="before_or_equal_guard") text+=" 从绫已运行，但人格钩子早于或等于闸门；请更新配套版本，避免判定前就发爬楼语。";
     else text+=" 从绫已运行，钩子顺序无法确认；请使用支持准备计时的配套版本。";
     host.textContent=text;
+    el("understandingMode").textContent = status.active
+      ? "从绫负责的会话当前由从绫原生感知处理；未启用从绫的会话才使用以下独立理解设置。"
+      : "当前可独立处理转发、引用、卡片、图片和语音；启用从绫的会话改用从绫原生感知。";
   }
 
   function currentConfig(key) {
@@ -888,6 +1210,12 @@
       empty_mention_reply: currentConfig("empty_mention_mode") === "fixed",
       empty_mention_persona_prompt: currentConfig("empty_mention_mode") === "persona",
       gate_main_fallback_timeout_seconds: currentConfig("gate_main_fallback_enabled") === true,
+      reply_typing_chars_per_second: currentConfig("expression_takeover_enabled") === true && currentConfig("reply_typing_enabled") === true,
+      understand_image_provider_id: currentConfig("expression_takeover_enabled") === true && currentConfig("understand_image_enabled") === true,
+      understand_voice_provider_id: currentConfig("expression_takeover_enabled") === true && currentConfig("understand_voice_enabled") === true,
+      reply_quote_enabled: currentConfig("expression_takeover_enabled") === true,
+      reply_mention_enabled: currentConfig("expression_takeover_enabled") === true,
+      expression_strip_emoji: currentConfig("expression_takeover_enabled") === true,
     };
     Object.entries(active).forEach(([key, enabled]) => {
       const control = el("field-" + key);
@@ -1090,14 +1418,47 @@
       (row.ctx ? "旧记录未分条保存，详情保留原文" : "没有调用上下文记录");
   }
 
+  function sessionIdentity(row) {
+    const current = chatData(row)?.current_message || {};
+    const session = String(row.session_id || current.session_id || row.gid || "");
+    const privateChat = (row.session_type || current.session_type)==="private" ||
+      /:(FriendMessage|friend):/i.test(session);
+    return {
+      session,
+      privateChat,
+      id: privateChat ? String(row.private_qq || current.private_qq || current.sender_id || session.split(":").at(-1)) :
+        String(row.group_id || current.group_id || row.gid || ""),
+    };
+  }
+  function sessionLabel(row) {
+    const identity=sessionIdentity(row);
+    return (identity.privateChat ? "私聊 " : "群 ") + (identity.id || "—");
+  }
+  async function searchDecisions() {
+    const query=state.q.trim();
+    const sequence=++searchSequence;
+    if (!query) return;
+    el("decisionSearchStatus").textContent="正在搜索群ID、私聊QQ及判定内容…";
+    try {
+      const data=await apiGet("console/decisions",{query});
+      if (sequence!==searchSequence) return;
+      state.searchRows=data.decisions || [];
+      renderDecisions();
+      el("decisionSearchStatus").textContent="从最近 "+(data.retained || 0)+" 条中找到 "+
+        state.searchRows.length+" 条（最多展示100条）。";
+    } catch(err) {
+      if (sequence===searchSequence) el("decisionSearchStatus").textContent="搜索失败："+err.message;
+    }
+  }
+
   function renderDecisions() {
-    const all = state.data.decisions || [];
+    const all = state.searchRows ?? state.data.decisions ?? [];
     const q = (state.q || "").trim().toLowerCase();
     const rows = q
       ? all.filter((d) => {
           const raw = d.raw == null ? "" : String(d.raw);
           const ctx = d.ctx == null ? "" : String(d.ctx);
-          return [raw,ctx,readingNote(d),d.mdl,JSON.stringify(d.chat_data || {}),
+          return [raw,ctx,readingNote(d),d.mdl,d.gid,JSON.stringify(sessionIdentity(d)),JSON.stringify(d.chat_data || {}),
             JSON.stringify(d.image_summaries || [])].join(" ").toLowerCase().includes(q);
         })
       : all;
@@ -1118,7 +1479,7 @@
       return "<tr>" +
         "<td>" + (index+1) + "</td>" +
         "<td>" + esc(fmtTime(d.ts)) + "</td>" +
-        "<td>" + esc(d.gid || "—") + "</td>" +
+        "<td>" + esc(sessionLabel(d)) + "</td>" +
         "<td>" + esc(d.score) + (d.corrected ? '<small title="模型输出与参与定义矛盾，已保留静默并修正评分">（原始 ' + esc(d.raw_score) + '）</small>' : "") + "</td>" +
         "<td>" + esc(d.th) + "</td>" +
         '<td><span class="pill ' + cls + '">' + text + "</span></td>" +
@@ -1126,7 +1487,7 @@
         (d.stage ? '<small>' +
           esc(STAGE_LABEL[d.stage] || d.stage) +
           " · " + esc(d.mdl || "") + "</small>" : "") + "</td>" +
-        "<td>" + esc(d.ms) + "ms</td>" +
+        "<td>" + (typeof d.ms==="number" ? esc(d.ms)+"ms" : "—") + "</td>" +
         "<td>" + rawCell + "</td>" +
         "</tr>";
     }).join("");
@@ -1147,6 +1508,7 @@
     summary.className="decision-summary";
     const values=[
       ["最终结果",row.action==="reply"?"放行（允许生成，不代表已发送）":"静默"],
+      ["会话",sessionLabel(row)],
       ["参与适合度",String(row.score ?? "—")+" / 100 · 阈值 "+String(row.th ?? "—")],
       ["模型动作",d.act==="reply"?"建议参与":d.act==="silent"?"建议静默":"未记录"],
       ["理解状态",understanding(d.understood)],
@@ -1166,6 +1528,36 @@
       const h=document.createElement("h4"); h.className="modal-sec"; h.textContent=title; body.appendChild(h);
       if(text) {const p=document.createElement("p");p.textContent=text;body.appendChild(p);}
     };
+    section("能力耗时", "文字复判累计计入文字判断。记忆交互总耗时包含向量化、检索与文档读取；并发分支可能重叠，不能相加作为总耗时。");
+    const grid=document.createElement("div");grid.className="timing-grid";
+    const metrics = row.timings || {};
+    const capabilities = [
+      ["text","文字判断"],["vision","识图判断"],["main_fallback","图片主模型兜底"],
+      ["memory","记忆交互（总）"],["embedding","向量化 / 等待向量"],
+      ["vector_index","向量索引检索"],["memory_read","记忆文档读取"],
+      ["input_parse","转发 / 引用 / 卡片解析"],["input_vision","输入图片理解"],["speech_to_text","语音转写"],
+    ];
+    Object.keys(metrics).filter(k=>k.startsWith("retrieval_") || k==="vector_adapter")
+      .forEach(k=>capabilities.push([k, k==="vector_adapter"?"兼容向量检索（含向量化）":
+        "检索分支 · "+k.slice(10)]));
+    capabilities.forEach(([key,label])=>{
+      const cell=document.createElement("div");cell.className="timing-cell";
+      const b=document.createElement("b");b.textContent=label;
+      const metric=metrics[key];
+      // 旧日志可从真实模型尝试还原模型耗时；细分检索未采集时不能写成0。
+      const legacy=(row.attempts || []).filter(a=>a.stage===key && typeof a.ms==="number" &&
+        (a.called || ["ok","timeout","error","parse_error"].includes(a.status)));
+      const value=metric && typeof metric.ms==="number" ? metric :
+        legacy.length ? {ms:legacy.reduce((n,a)=>n+a.ms,0),calls:legacy.length,status:"旧记录"} : null;
+      const missing = metrics.version ? (["text","vision","main_fallback","memory"].includes(key)
+        || !metrics.memory || metrics.retrieval_collected ? "未调用" : "未采集") : "未采集（旧记录）";
+      const small=document.createElement("small");
+      small.textContent=value ? value.ms+" ms · "+value.calls+" 次 · "+
+        (STATUS_LABEL[value.status] || ({empty:"无可用记忆",cancelled:"已取消"})[value.status] || value.status)
+        : missing;
+      cell.append(b,small);grid.appendChild(cell);
+    });
+    body.appendChild(grid);
     if(row.corrected) section("分数修正", "模型原始给分 "+row.raw_score+
       "，与静默或未理解状态矛盾；插件保留否决，参与适合度修正为 "+row.score+"。");
     const attempts=Array.isArray(row.attempts)?row.attempts:[];
@@ -1175,7 +1567,9 @@
       attempts.forEach(a=>{
         const li=document.createElement("li");
         li.textContent=(STAGE_LABEL[a.stage]||a.stage)+" · "+(a.model||"未选到模型")+" · "+
-          (STATUS_LABEL[a.status]||a.status)+" · "+(a.ms ?? 0)+" ms";
+          (STATUS_LABEL[a.status]||a.status)+" · "+
+          (a.called===false || (!a.called && !["ok","error","timeout","parse_error"].includes(a.status))
+            ? "未调用" : (a.ms ?? "未采集")+" ms");
         if(a.status==="ok") {
           const small=document.createElement("div");small.className="chat-meta";
           small.textContent=(a.act==="reply"?"建议参与":"建议静默")+"，参与分 "+a.score+
@@ -1254,14 +1648,14 @@
   }
 
   // ---- 模式说明 + 与就地提示一致的完整参数手册 ----
-  const HELP_MANUAL = [
+  const HELP_MANUAL = () => [
     {
       title: "闸门模式（总开关）",
       items: [
         { name: "硬闸门", key: "gate_mode=enforce", desc: "日常运行。静默消息不会生成回复；主模型仍可能用于图片异常兜底判定。", ex: "阈值 50、参与分 30：不生成回复。结束话题即使误得高分也不放行。" },
         { name: "观察模式", key: "gate_mode=shadow", desc: "继续判定和记录，但不按判定结果拦截回复；生成费用可能增加。", ex: "想观察新模型的打分尺度时使用。判定静默也可能继续生成回复。" },
         { name: "旧行为", key: "gate_mode=legacy", desc: "先生成再丢弃（旧逻辑），只在回滚时用，平时别选。", ex: "新逻辑出问题时临时切回，保证行为可预期。" },
-        { name: "完全解耦", key: "gate_mode=off", desc: "不判定、不拦截、不记录；机器人仍受 AstrBot 和其他插件设置影响。", ex: "临时停用过滤选此项；称呼前缀的框架注册在插件启动时更新。" },
+        { name: "关闭参与判断", key: "gate_mode=off", desc: "不做参与评分；回复方式、模拟耗时和撤回保护分别控制。", ex: "停用过滤时仍可保持引用/@回复方式。" },
       ],
     },
     ...FIELD_GROUPS.map(group => ({
@@ -1273,7 +1667,7 @@
       items: [
         { name: "分数分布与阈值扫描", key: "distribution", desc: "按文字判定模型和新协议统计；视觉/兜底样本不混入。样本放行率不保证将来发言比例。", ex: "点一个建议阈值只会填入参数，仍需保存；还应检查互聊、停口是否被正确静默。" },
         { name: "文字试跑", key: "probe", desc: "不发消息、不计插件统计和预算，但实际调用模型API；只支持文字输入。", ex: "填「怎么加点？」和机器人上一句，查看得分和原因。" },
-        { name: "最近判定", key: "decisions", desc: "默认显示中文判断说明、流水条数和当前消息；详情按序号展示模型过程、图片摘要与聊天内容，原始JSON可展开排查。", ex: "显示「参考流水2条＋当前消息1条」；详情编号1、2是参考消息，3是当前消息。" },
+        { name: "最近判定", key: "decisions", desc: "可搜索群ID、私聊QQ、原话或上下文。详情展示能力耗时、模型过程、图片摘要与聊天内容；旧记录未采集的耗时不显示为0。", ex: "输入群ID定位该群的判定；输入私聊QQ定位私聊。记忆交互耗时包含向量化与检索，不将重叠项相加。" },
         { name: "保存与放弃", key: "save", desc: "只有点击保存后配置才生效。放弃更改只撤销当前页面未保存的值。", ex: "调两项后底部显示「2项未保存」；点保存统一更新。" },
       ],
     },
@@ -1284,9 +1678,10 @@
     body.innerHTML = "";
     const query = el("helpSearch").value.trim().toLowerCase();
     let count = 0;
-    HELP_MANUAL.forEach((group) => {
+    HELP_MANUAL().forEach((group) => {
       const items = group.items.filter(item => !query ||
-        [group.title, item.name, item.key, item.desc, item.ex].join(" ").toLowerCase().includes(query));
+        [group.title, item.name, item.key, item.desc, ...helpExamples(item.key, item)]
+          .join(" ").toLowerCase().includes(query));
       if (!items.length) return;
       const g = document.createElement("div");
       g.className = "help-group";
@@ -1307,15 +1702,17 @@
         const desc = document.createElement("div");
         desc.className = "help-desc";
         desc.textContent = item.desc;
-        const ex = document.createElement("div");
-        ex.className = "help-ex";
-        const b = document.createElement("b");
-        b.textContent = "例：";
-        ex.appendChild(b);
-        ex.appendChild(document.createTextNode(item.ex));
         it.appendChild(name);
         it.appendChild(desc);
-        it.appendChild(ex);
+        helpExamples(item.key, item).forEach((text, index) => {
+          const ex = document.createElement("div");
+          ex.className = "help-ex";
+          const b = document.createElement("b");
+          b.textContent = "示例 " + (index + 1) + "：";
+          ex.appendChild(b);
+          ex.appendChild(document.createTextNode(text));
+          it.appendChild(ex);
+        });
         g.appendChild(it);
       });
       body.appendChild(g);
@@ -1335,6 +1732,36 @@
 
   function closeHelp() {
     toggleDialog("helpModal", false);
+  }
+
+  function openFieldHelp(key, label) {
+    const help = key === "gate_mode" ? MODE_CONFIG_HELP : FIELD_HELP[key];
+    if (!help) return;
+    el("fieldHelpTitle").textContent = label || "配置详情";
+    const body = el("fieldHelpModalBody");
+    body.innerHTML = "";
+    const code = document.createElement("code");
+    code.className = "field-help-key";
+    code.textContent = key;
+    const desc = document.createElement("p");
+    desc.className = "field-help-desc";
+    desc.textContent = help.desc;
+    const examples = document.createElement("div");
+    examples.className = "field-help-examples";
+    helpExamples(key, help).forEach((text, index) => {
+      const item = document.createElement("p");
+      item.className = "field-help-example";
+      const heading = document.createElement("b");
+      heading.textContent = "示例 " + (index + 1);
+      item.append(heading, document.createTextNode(text));
+      examples.appendChild(item);
+    });
+    body.append(code, desc, examples);
+    toggleDialog("fieldHelpModal", true);
+  }
+
+  function closeFieldHelp() {
+    toggleDialog("fieldHelpModal", false);
   }
 
   const dialogOpeners = new Map();
@@ -1370,8 +1797,10 @@
   }
 
   function discardChanges() {
+    if (state.saving) return;
     state.draft = {};
     state.dirty.clear();
+    nativeDraft = {};
     state.mode = state.data.mode;
     themeModeBadge(state.mode);
     el("dirtyMsg").textContent = "";
@@ -1379,6 +1808,9 @@
     renderModes();
     renderFields();
     renderDistribution();
+    renderNative();
+    el("nativeStatus").textContent = "已放弃更改，与AstrBot原生配置一致";
+    el("nativeStatus").className = "msg";
   }
 
   function applyState(data) {
@@ -1387,7 +1819,7 @@
     state.draft = {};
     state.dirty.clear();
     el("dirtyMsg").textContent = "";
-    hideSaveBar();
+    showSaveBar();
     el("ver").textContent = "v" + (data.version || "—");
     themeModeBadge(data.mode);
     renderModes();
@@ -1395,6 +1827,7 @@
     renderStats();
     renderDistribution();
     renderDecisions();
+    if (state.q.trim()) searchDecisions();
   }
 
   async function load(full) {
@@ -1419,6 +1852,7 @@
       renderStats();
       renderDistribution();
       renderDecisions();
+      if (state.q.trim()) searchDecisions();
     } catch (err) {
       el("dirtyMsg").textContent = "读取失败：" + err.message;
       el("dirtyMsg").className = "msg err";
@@ -1426,6 +1860,7 @@
   }
 
   async function save() {
+    if (state.saving || nativeLoading) return;
     const payload = {};
     if (state.dirty.has("gate_mode")) payload.gate_mode = state.mode;
     state.dirty.forEach((key) => {
@@ -1435,22 +1870,50 @@
       if (value === "" && key !== "classifier_provider_id" && key !== "vision_provider_id") return;
       payload[key] = value;
     });
-    if (!Object.keys(payload).length) {
+    if (!Object.keys(payload).length && !Object.keys(nativeDraft).length) {
       el("saveMsg").textContent = "没有改动";
       el("saveMsg").className = "msg";
       return;
     }
     el("saveMsg").textContent = "保存中…";
     el("saveMsg").className = "msg";
-    try {
-      const data = await apiPost("console/config", payload);
-      applyState(data);
-      el("saveMsg").textContent = "已保存并生效";
-      el("saveMsg").className = "msg ok";
-    } catch (err) {
-      el("saveMsg").textContent = "保存失败：" + err.message;
-      el("saveMsg").className = "msg err";
+    const snapshot = {...state.draft};
+    const policyChanged = Object.keys(payload).some(key=>POLICY_KEYS.has(key));
+    state.saving = true;
+    el("saveBtn").disabled = el("saveBarSave").disabled = el("saveBarDiscard").disabled = el("nativeReload").disabled = true;
+    renderNative();
+    const saved = [], errors = [];
+    if (Object.keys(nativeDraft).length) {
+      try {
+        await saveNative();
+        saved.push("分段已保存，两边生效");
+      } catch (err) {
+        errors.push("分段保存失败：" + err.message);
+      }
     }
+    if (Object.keys(payload).length) try {
+      const data = await apiPost("console/config", payload);
+      // 保存期间新增、反向恢复原值的编辑都要保留，不能只检查仍在draft里的键。
+      const live = {...state.data.config, ...state.draft};
+      const pending = [...new Set([...Object.keys(snapshot), ...Object.keys(state.draft)])]
+        .filter(key => JSON.stringify(live[key]) !== JSON.stringify(
+          Object.hasOwn(snapshot, key) ? snapshot[key] : state.data.config[key]))
+        .map(key => [key, live[key]]);
+      applyState(data);
+      pending.forEach(([key,value])=>setDirty(key,value));
+      if (state.dirty.has("gate_mode")) state.mode=state.draft.gate_mode;
+      if (pending.length) { renderFields();renderModes(); }
+      saved.push("回复参数已保存" + (policyChanged ? "，判定口径已变化" : ""));
+    } catch (err) {
+      errors.push("参数保存失败：" + err.message);
+    }
+    state.saving = false;
+    el("saveBtn").disabled = el("saveBarSave").disabled = el("saveBarDiscard").disabled = el("nativeReload").disabled = false;
+    renderNative();
+    showSaveBar();
+    el("saveMsg").textContent = [...saved, ...errors].join(" · ");
+    el("saveMsg").className = errors.length ? "msg err" : "msg ok";
+    if (errors.length) el("saveBarText").textContent = "仍有改动未保存 · " + errors.join(" · ");
   }
 
   async function probe() {
@@ -1497,12 +1960,32 @@
   }
 
   el("saveBtn").addEventListener("click", save);
+  el("nativeReload").addEventListener("click", () => loadNative());
+  el("nativeProfile").addEventListener("change", () => {
+    loadNative(el("nativeProfile").value);
+  });
+  document.querySelectorAll(".page-tabs button").forEach((btn, index, buttons)=>{
+    btn.addEventListener("click", ()=>selectPage(btn.dataset.page));
+    btn.addEventListener("keydown", ev=>{
+      const next = ev.key==="ArrowRight" ? (index+1)%buttons.length :
+        ev.key==="ArrowLeft" ? (index+buttons.length-1)%buttons.length :
+        ev.key==="Home" ? 0 : ev.key==="End" ? buttons.length-1 : -1;
+      if (next>=0) { ev.preventDefault(); selectPage(buttons[next].dataset.page,true); }
+    });
+  });
+  window.addEventListener("hashchange",followHash);
+  followHash();
   el("probeBtn").addEventListener("click", probe);
   el("resetBtn").addEventListener("click", reset);
   el("helpBtn").addEventListener("click", openHelp);
   el("helpSearch").addEventListener("input", renderHelp);
   el("saveBarSave").addEventListener("click", save);
   el("saveBarDiscard").addEventListener("click", discardChanges);
+  window.addEventListener("beforeunload", ev => {
+    if (!state.dirty.size && !Object.keys(nativeDraft).length) return;
+    ev.preventDefault();
+    ev.returnValue = "";
+  });
   el("rawModalClose").addEventListener("click", closeRawModal);
   el("rawModal").addEventListener("click", (ev) => {
     if (ev.target === el("rawModal")) closeRawModal();
@@ -1510,6 +1993,12 @@
   el("helpModalClose").addEventListener("click", closeHelp);
   el("helpModal").addEventListener("click", (ev) => {
     if (ev.target === el("helpModal")) closeHelp();
+  });
+  document.querySelector('[data-config-help="gate_mode"]').addEventListener("click", () =>
+    openFieldHelp("gate_mode", "闸门模式"));
+  el("fieldHelpModalClose").addEventListener("click", closeFieldHelp);
+  el("fieldHelpModal").addEventListener("click", (ev) => {
+    if (ev.target === el("fieldHelpModal")) closeFieldHelp();
   });
   document.addEventListener("keydown", (ev) => {
     const dialog = document.querySelector(".modal-mask.show .modal");
@@ -1524,6 +2013,7 @@
     if (ev.key !== "Escape") return;
     if (el("rawModal").classList.contains("show")) closeRawModal();
     if (el("helpModal").classList.contains("show")) closeHelp();
+    if (el("fieldHelpModal").classList.contains("show")) closeFieldHelp();
   });
 
   (async function boot() {
@@ -1542,11 +2032,18 @@
     // 一旦宿主没发 context 消息就永远 pending，导致下面的 load 根本不执行。
     // apiGet/apiPost 本身走 postMessage 请求通道，不依赖 ready，可以直接发。
     const searchInput = el("decisionSearch");
+    let searchTimer;
     searchInput.addEventListener("input", () => {
       state.q = searchInput.value;
+      state.searchRows = null;
+      searchSequence++;
       renderDecisions();
+      clearTimeout(searchTimer);
+      if (state.q.trim()) searchTimer=setTimeout(searchDecisions,250);
+      else el("decisionSearchStatus").textContent="默认展示最近100条；搜索覆盖已恢复的最近600条记录。";
     });
     await load(true);
+    await loadNative();
     setInterval(() => load(false), 15000);
   })();
 })();
