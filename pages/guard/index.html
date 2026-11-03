@@ -523,6 +523,7 @@
     vision_budget: "超出视觉判定预算",
     deadline: "整条判定超时",
     fallback_same_model: "兜底模型与失败模型相同",
+    image_cache_busy: "同会话图片判断正在进行",
   };
   const MODE_HINT = {
     enforce: "硬闸门：静默时不生成回复；视觉异常可使用主模型做一次判定",
@@ -539,6 +540,7 @@
   ];
   const VISION_FIELDS = [
     { key: "vision_provider_id", label: "多模态小模型", type: "provider" },
+    { key: "gate_image_cache_ttl_seconds", label: "图片含义缓存", type: "number", min: 0, max: 1800, step: 1, unit: "秒" },
     { key: "vision_timeout_seconds", label: "多模态超时", type: "number", min: 0.5, max: 12, step: 0.1, unit: "秒" },
     { key: "gate_main_fallback_enabled", label: "主模型兜底", type: "bool" },
     { key: "gate_main_fallback_timeout_seconds", label: "主模型兜底超时", type: "number", min: 0.5, max: 12, step: 0.1, unit: "秒" },
@@ -575,6 +577,7 @@
     classifier_timeout_seconds: { desc: "只限制一次文字判定的等待时间，超时则静默。", ex: "设 3.5 秒：文字模型超过 3.5 秒还没返回，本次不主动回复。" },
     gate_min_length: { desc: "归一化后的文字太短就跳过判断；有可用图片的消息除外。设 0 关闭长度过滤。", ex: "设 2 字：「嗯」会被过滤，「怎么打」可以进入判断；纯图片仍可走看图流程。" },
     vision_provider_id: { desc: "只有图片内容决定是否参与时才使用，同时给回复模型提供图片摘要；正常静默不会再兜底。", ex: "选 qwen3-vl-plus：看图判断并提取摘要；摘要不足时回复仍需原图。留空按主模型兜底开关处理。" },
+    gate_image_cache_ttl_seconds: { desc: "同完整会话、同视觉配置的相同图片，可短时复用已有观察；每条新消息仍重新判断是否参与。0关闭。", ex: "设300秒：5分钟内再次聊到已识别的图，文字模型直接参考缓存摘要；命中不续期，改模型或重载后重新识别。" },
     vision_timeout_seconds: { desc: "只限制一次多模态判断；超时或调用失败时，才尝试已开启的主模型兜底。", ex: "设 6 秒：看图模型超过 6 秒未返回，再检查能否用会话主模型兜底。" },
     gate_main_fallback_enabled: { desc: "多模态模型异常时，让当前会话主模型再判断一次；主模型必须支持图片。", ex: "开启：多模态接口报错 → 主模型兜底；多模态正常说「不该回」就到此结束。" },
     gate_main_fallback_timeout_seconds: { desc: "开启主模型兜底时，限制这次兜底调用的等待时间。", ex: "设 6 秒：主模型兜底超过 6 秒也未返回，保持静默。" },
@@ -976,6 +979,8 @@
       ["放行 / 静默", (t.allowed || 0) + " / " + (t.silenced || 0), "省下生成 " + (t.gen_skipped || 0) + " 次"],
       ["累计判断", life.total || 0, "放行 " + (life.allowed || 0) + " · 静默 " + (life.blocked || 0)],
       ["累计平均分", life.average || 0, "详细分布见下方运行记录"],
+      ["图片缓存命中", (state.data.image_cache || {}).hits || 0,
+        "当前 " + ((state.data.image_cache || {}).entries || 0) + " 张 · 缓存含义，不缓存是否回复"],
     ];
     el("stats").innerHTML = cells.map(([k, v, s]) =>
       '<div class="stat"><em>' + esc(k) + "</em><strong>" + esc(v) + "</strong><small>" + esc(s) + "</small></div>"
@@ -1129,6 +1134,8 @@
       ["背景需求",GROUND_LABEL[d.ground] || "未记录"],
       ["判定模型",row.mdl || "未记录"],
       ["本次用时",String(row.ms ?? "—")+" ms"],
+      ["图片上下文",String(row.available_image_count ?? row.image_count ?? 0)+" 张可用 · "+
+        String(row.image_cache_hits || 0)+" 张命中缓存"],
     ];
     values.forEach(([label,value])=>{
       const p=document.createElement("p"); const b=document.createElement("b");
@@ -1170,6 +1177,7 @@
           ({current:"当前消息",reply:"引用消息",recent:"近期流水"})[source.source]+
           (source.sender_id ? " · "+source.sender_id : "")+"）":"")+"："+item.summary;
         if(item.uncertainty) p.textContent+="\n不确定点："+item.uncertainty;
+        if(item.cached) p.textContent+="\n来自缓存（"+item.cache_age_seconds+" 秒前识别），本次未重复识别此图。";
         p.className="chat-text";body.appendChild(p);
       });
     }
@@ -1384,6 +1392,7 @@
       state.data.lifetime = data.lifetime;
       state.data.decisions = data.decisions;
       state.data.budget = data.budget;
+      state.data.image_cache = data.image_cache;
       state.data.distribution = data.distribution;
       renderStats();
       renderDistribution();

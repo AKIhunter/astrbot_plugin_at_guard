@@ -17,10 +17,12 @@ from astrbot.core.agent.message import TextPart
 from astrbot.core.platform.message_type import MessageType
 
 try:  # 作为插件包加载时走相对导入
-    from .guard_engine import GateEngine
+    from .guard_engine import Decision, GateEngine, POLICY_VERSION
+    from .guard_image_cache import ImageObservationCache
     from .guard_media import image_target
 except ImportError:  # 单文件调试兜底
-    from guard_engine import GateEngine
+    from guard_engine import Decision, GateEngine, POLICY_VERSION
+    from guard_image_cache import ImageObservationCache
     from guard_media import image_target
 
 
@@ -53,6 +55,7 @@ class Main(Star):
         self.last_bot_line_at: dict[str, float] = {}
         self.context_revision: dict[str, int] = defaultdict(int)
         self.recent_images = defaultdict(lambda: deque(maxlen=30))
+        self.image_cache = ImageObservationCache()
         self.engine = GateEngine(self.config, self.data_dir, self.logger)
 
     def _gate_mode(self) -> str:
@@ -225,20 +228,41 @@ class Main(Star):
         async def resolve_images():
             return image_snapshot
 
-        decision = await self.engine.decide(
-            group_key=group_key,
-            current_text=event.message_str,
-            context_lines=context_lines,
-            bot_line=self._fresh_bot_line(group_key),
-            is_private=not is_group,
-            resolve_provider=lambda: self._resolve_classifier_provider(event),
-            message_meta=message_meta,
-            resolve_memory=lambda: self._recall_gate_memory(event),
-            resolve_vision_provider=self._resolve_vision_provider,
-            resolve_main_provider=lambda: self._resolve_main_vision_provider(event),
-            resolve_images=resolve_images,
-            record_result=False,
-        )
+        cache = self._image_observation_cache()
+        scope = str(event.unified_msg_origin or "")
+        namespace = self.engine.vision_label() + "|" + POLICY_VERSION
+        sources = [{
+            key: str(image.get(key, ""))[:100]
+            for key in ("source", "sender_id", "message_id", "age_seconds")
+        } for image in image_snapshot]
+
+        async def judge():
+            cached = cache.lookup(scope, namespace, image_snapshot, self.engine.image_cache_ttl())
+            result = await self.engine.decide(
+                group_key=group_key, current_text=event.message_str,
+                context_lines=context_lines, bot_line=self._fresh_bot_line(group_key),
+                is_private=not is_group,
+                resolve_provider=lambda: self._resolve_classifier_provider(event),
+                message_meta=message_meta, resolve_memory=lambda: self._recall_gate_memory(event),
+                resolve_vision_provider=self._resolve_vision_provider,
+                resolve_main_provider=lambda: self._resolve_main_vision_provider(event),
+                resolve_images=resolve_images, record_result=False,
+                cached_image_summaries=cached, available_image_sources=sources,
+            )
+            if result.source == "model" and result.stage in {"vision", "main_fallback"}:
+                cache.store(scope, namespace, image_snapshot, result.image_summaries,
+                            result.model, self.engine.image_cache_ttl())
+            return result
+
+        if image_snapshot and scope and self.engine.image_cache_ttl():
+            try:
+                async with cache.session_lock(scope):
+                    decision = await judge()
+            except asyncio.TimeoutError:
+                # 不让并发等待超时转成额外视觉调用，下一条可复用已完成的观察。
+                decision = Decision(threshold=self.engine.threshold(), reason="image_cache_busy", source="rule")
+        else:
+            decision = await judge()
         # 模型看到的是调用前的快照；调用期间新到的群消息使该结果过时。
         event.set_extra("_at_guard_judged_revision", revision)
         stale_reason = self._stale_reason(event, group_key)
@@ -391,6 +415,11 @@ class Main(Star):
         if not provider_id:
             return None
         return image_target(self.context.get_provider_by_id(provider_id), label)
+
+    def _image_observation_cache(self):
+        if not hasattr(self, "image_cache"):
+            self.image_cache = ImageObservationCache()
+        return self.image_cache
 
     async def _resolve_main_vision_provider(self, event):
         provider = await self.context.get_using_provider_async(event.unified_msg_origin)
@@ -655,6 +684,7 @@ class Main(Star):
             if any(item["url"] == value for item in found):
                 return
             found.append(dict(url=value, source=source, sender_id=str(sender_id or ""),
+                              session=str(event.unified_msg_origin or ""),
                               message_id=str(message_id), age_seconds=str(round(age, 1))))
 
         components = getter() if callable(getter) else []
@@ -674,12 +704,15 @@ class Main(Star):
         now = time.monotonic()
         rows = list(getattr(self, "recent_images", {}).get(group_key, ()))
         current_stamp = event.get_extra("_at_guard_recorded_at")
-        # 与判定流水相同的群、条数、年龄窗口；当前/引用优先，最多3张。
-        for stamp, images in reversed(rows[-self.engine.context_messages():]
-                                      if self.engine.context_messages() else []):
-            if stamp == current_stamp or now - stamp > self.engine.context_max_age():
+        # 用实际送入文字判定的消息时间戳对齐，防止文字截掉的旧图仍混入附件。
+        stamps = {stamp for stamp, _ in self._context_rows(
+            group_key, self.engine.context_messages(), current_stamp)}
+        for stamp, images in reversed(rows):
+            if stamp not in stamps:
                 continue
             for item in images:
+                if item.get("session") != str(event.unified_msg_origin or ""):
+                    continue  # 同群号在不同平台/会话出现时也不能混用图片。
                 if len(result) >= 3:
                     return result
                 if all(old["url"] != item["url"] for old in result):
@@ -946,16 +979,14 @@ class Main(Star):
             if timestamp >= since and text.strip() and not text.startswith(BOT_LINE_PREFIX)
         ]
 
-    def _recent_context(self, group_key: str, max_messages: int,
-                        exclude_timestamp: float | None = None) -> list[str]:
-        """Return bounded, escaped chat lines so transcript text cannot alter the gate."""
+    def _context_rows(self, group_key, max_messages, exclude_timestamp=None):
         if max_messages <= 0:
             return []
         rows = list(self.recent_messages.get(group_key, ()))
         now = time.monotonic()
         rows = [(stamp, raw) for stamp, raw in rows
                 if now - stamp <= self.engine.context_max_age() and stamp != exclude_timestamp]
-        newest_first: list[str] = []
+        newest_first = []
         budget = 2400
         for stamp, raw in reversed(rows[-max_messages:]):
             line = f"[{max(0, int(now - stamp))}秒前] " + html.escape(
@@ -965,12 +996,17 @@ class Main(Star):
                 continue
             if len(line) > budget:
                 line = line[:budget]
-            newest_first.append(line)
+            newest_first.append((stamp, line))
             budget -= len(line)
             if budget <= 0:
                 break
         newest_first.reverse()
         return newest_first
+
+    def _recent_context(self, group_key: str, max_messages: int,
+                        exclude_timestamp: float | None = None) -> list[str]:
+        """Return bounded, escaped chat lines so transcript text cannot alter the gate."""
+        return [line for _, line in self._context_rows(group_key, max_messages, exclude_timestamp)]
 
     def _prune_fingerprints(self, now: float, window: int) -> None:
         if window <= 0:
