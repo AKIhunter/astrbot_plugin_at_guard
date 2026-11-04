@@ -203,7 +203,8 @@ class TimingTest(unittest.TestCase):
 
 _timing_path = Path(os.environ.get(
     "LIVINGMEMORY_TIMING_SOURCE",
-    str(Path(__file__).resolve().parents[1] / "LivingMemory/core/retrieval/request_timing.py")))
+    # 测试移入 tests/ 后仍从插件同级目录寻找可选配套源码。
+    str(Path(__file__).resolve().parents[2] / "LivingMemory/core/retrieval/request_timing.py")))
 timing = None
 # LivingMemory是可选配套插件；独立克隆AtGuard时不能让其缺席阻断全部测试导入。
 if _timing_path.is_file():

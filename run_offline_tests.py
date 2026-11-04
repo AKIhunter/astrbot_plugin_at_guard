@@ -84,6 +84,9 @@ if __name__ == "__main__":
     if importlib.util.find_spec("astrbot") is None:
         install_framework_stubs()
     root = Path(__file__).resolve().parent
-    suite = unittest.defaultTestLoader.discover(str(root), pattern="test_*.py")
+    # 测试集中存放；保留根入口及测试间共享 fixture 的原有导入方式。
+    sys.path.insert(0, str(root))
+    sys.path.insert(0, str(root / "tests"))
+    suite = unittest.defaultTestLoader.discover(str(root / "tests"), pattern="test_*.py")
     result = unittest.TextTestRunner(verbosity=1).run(suite)
     sys.exit(not result.wasSuccessful())

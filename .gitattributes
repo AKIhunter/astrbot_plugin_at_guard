@@ -1,2 +1,6 @@
 test_*.py export-ignore
+tests/ export-ignore
 docs/ export-ignore
+scripts/ export-ignore
+.github/workflows/ export-ignore
+run_offline_tests.py export-ignore

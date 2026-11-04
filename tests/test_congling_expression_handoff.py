@@ -15,7 +15,8 @@ from astrbot.api.message_components import Plain
 
 ROOT = Path(os.environ.get(
     "CONGLING_HANDOFF_SOURCE",
-    str(Path(__file__).parent.parent / "astrbot_plugin_congling"),
+    # 与根目录旧测试入口保持相同的配套插件查找位置。
+    str(Path(__file__).resolve().parents[2] / "astrbot_plugin_congling"),
 ))
 
 

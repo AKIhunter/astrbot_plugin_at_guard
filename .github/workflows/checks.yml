@@ -1,0 +1,22 @@
+name: 文档与离线回归
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 文档与资产检查
+        run: python -B scripts/check_docs.py
+      - name: 独立插件离线回归
+        run: python -B run_offline_tests.py
