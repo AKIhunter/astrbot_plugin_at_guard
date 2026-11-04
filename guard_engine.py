@@ -492,7 +492,13 @@ class GateEngine:
         return self._int("gate_context_messages", 8, 0, 30)
 
     def context_max_age(self) -> float:
-        return self._float("gate_context_max_age_seconds", 300, 30, 3600)
+        # 0 明确关闭时间过滤；正数继续兼容原有的 30~3600 秒范围。
+        value = self._float("gate_context_max_age_seconds", 300, 0, 3600)
+        return 0 if value == 0 else max(30, value)
+
+    def context_age_allowed(self, age: float) -> bool:
+        maximum = self.context_max_age()
+        return maximum == 0 or age <= maximum
 
     def reply_max_age(self) -> float:
         return self._float("gate_reply_max_age_seconds", 30, 5, 120)

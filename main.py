@@ -95,6 +95,15 @@ class Main(Star):
             self.understanding = Understanding(self)
         return self.understanding
 
+    def _image_generation(self):
+        if not hasattr(self, "image_generation"):
+            try:
+                from .guard_image_settings import ImageSettings
+            except ImportError:
+                from guard_image_settings import ImageSettings
+            self.image_generation = ImageSettings(self)
+        return self.image_generation
+
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize + 10)
     async def parse_reply_input(self, event: AstrMessageEvent):
         """独立模式本地展开；配套时保持从绫的原生输入与感知。"""
@@ -116,6 +125,7 @@ class Main(Star):
     @filter.on_llm_request(priority=-maxsize)
     async def attach_reply_contract(self, event: AstrMessageEvent, req: ProviderRequest):
         self._delivery()
+        self._image_generation().attach(event, req)
         self.segments.attach(event, req)
         if not hasattr(self, "evidence"):
             self.evidence = EvidenceMemory(self)
@@ -271,6 +281,9 @@ class Main(Star):
         await self._delivery().prepare(event)
 
     async def terminate(self):
+        image_generation = getattr(self, "image_generation", None)
+        if image_generation is not None:
+            await image_generation.close()
         native_settings = getattr(self, "_native_settings", None)
         if native_settings is not None:
             native_settings.close()
@@ -953,7 +966,7 @@ class Main(Star):
 
     def _fresh_bot_line(self, group_key: str) -> str:
         stamp = self.last_bot_line_at.get(group_key)
-        if stamp is None or time.monotonic() - stamp > self.engine.context_max_age():
+        if stamp is None or not self.engine.context_age_allowed(time.monotonic() - stamp):
             return ""
         return self.last_bot_line.get(group_key, "")
 
@@ -1036,7 +1049,7 @@ class Main(Star):
         for component in components[:30]:
             if isinstance(component, Reply):
                 age = max(0, time.time() - float(component.time)) if component.time else 0
-                if age > self.engine.context_max_age():
+                if not self.engine.context_age_allowed(age):
                     continue
                 for item in (component.chain or [])[:10]:
                     add(item, "reply", component.sender_id, component.id, age)
@@ -1376,7 +1389,7 @@ class Main(Star):
         rows = list(self.recent_messages.get(group_key, ()))
         now = time.monotonic()
         rows = [(stamp, raw) for stamp, raw in rows
-                if now - stamp <= self.engine.context_max_age() and stamp != exclude_timestamp]
+                if self.engine.context_age_allowed(now - stamp) and stamp != exclude_timestamp]
         newest_first = []
         budget = 2400
         for stamp, raw in reversed(rows[-max_messages:]):

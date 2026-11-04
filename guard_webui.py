@@ -52,7 +52,7 @@ NUMERIC_FIELDS: dict[str, tuple[str, float, float]] = {
     "gate_min_length": ("int", 0, 20),
     "gate_hourly_budget": ("int", 0, 600),
     "gate_context_messages": ("int", 0, 30),
-    "gate_context_max_age_seconds": ("float", 30, 3600),
+    "gate_context_max_age_seconds": ("float", 0, 3600),
     "gate_reply_max_age_seconds": ("float", 5, 120),
     "gate_memory_timeout_seconds": ("float", 0.2, 5),
     "participation_context_messages": ("int", 2, 30),
@@ -398,6 +398,8 @@ def _coerce(key: str, value: Any) -> Any:
         raise ValueError(f"{key} 需要数字") from exc
     if not math.isfinite(number) or number < low or number > high:
         raise ValueError(f"{key} 超出范围 {low}~{high}")
+    if key == "gate_context_max_age_seconds" and 0 < number < 30:
+        raise ValueError("上下文有效期应为0（不限时间）或30~3600秒")
     return int(round(number)) if kind == "int" else round(number, 2)
 
 
@@ -495,7 +497,8 @@ def _native_settings(plugin):
 
 
 def _image_settings(plugin):
-    return ImageSettings(plugin.context, _native(plugin).lock)
+    # 与工具共用同一独立能力实例；不再读取或写入 BiliBot。
+    return plugin._image_generation()
 
 
 async def handle_native_settings(plugin):
@@ -634,8 +637,8 @@ def register_webui(plugin: Any, context: Context) -> None:
         ("console/native-segments", "POST", handle_save_native_segments, "同步AstrBot原生分段配置"),
         ("console/native-settings", "GET", handle_native_settings, "读取原生模型与人格配置"),
         ("console/native-settings", "POST", handle_save_native_settings, "保存原生模型与固定人格"),
-        ("console/image-settings", "GET", handle_image_settings, "读取BiliBot文生图配置"),
-        ("console/image-settings", "POST", handle_save_image_settings, "保存BiliBot全局文生图配置"),
+        ("console/image-settings", "GET", handle_image_settings, "读取独立AI生图配置与每日额度"),
+        ("console/image-settings", "POST", handle_save_image_settings, "保存独立AI生图设置"),
         ("console/flow", "GET", handle_flow, "读取判定与生成流程"),
         ("console/reset", "POST", handle_reset, "清零智能过滤统计"),
         ("console/probe", "POST", handle_probe, "试跑一次参与判定"),

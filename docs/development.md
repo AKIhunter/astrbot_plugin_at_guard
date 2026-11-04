@@ -13,7 +13,7 @@ main.py / guard_*.py          运行实现，保持既有导入路径
 _conf_schema.json            插件参数的权威默认值
 pages/guard/index.html       四页控制台
 docs/                       使用、配置、流程、维护、历史档案
-tests/test_*.py              17 个测试模块
+tests/test_*.py              独立回归与可选配套测试
 scripts/check_docs.py        标准库文档校验
 run_offline_tests.py         根目录兼容运行入口
 .github/img/Banner.png       README Banner
@@ -50,7 +50,7 @@ python3 -B run_offline_tests.py
 
 ## 文档检查与发布
 
-`scripts/check_docs.py` 使用标准库检查 Markdown 本地路径与锚点、完整 schema 默认值表、当前版本、图标尺寸、仓库测试布局和常见元数据字段。每个 PR 及主分支推送执行文档检查和独立离线回归，不需要密钥。
+`scripts/check_docs.py` 使用标准库检查 Markdown 本地路径与锚点、完整 schema 默认值表、独立生图默认值和原生字段保存路径、当前版本、图标尺寸及测试布局。源码常量通过AST读取，不导入或启动插件。每个 PR 及主分支推送执行文档检查和独立离线回归，不需要密钥。
 
 发布前还应使用可用 YAML 解析器解析 metadata，确认 GitHub Markdown 与 Mermaid 渲染。版本以 metadata 为准，同步控制台版本和更新日志；源代码若增加注册版本也须保持一致。
 
@@ -73,6 +73,8 @@ git archive --format=zip HEAD -o /tmp/livinghello-release.zip
 | gate_state.json | 今日计数，按自然日切换 | 日期切换、计数逻辑或恢复问题 |
 | participation_stats.json | 累计参与次数、分布等 | 判定口径变更后核对解释；不自动清零 |
 | native_persona_pins.json | 各原生配置的固定人格 | 人格修改、删除、损坏或重载 |
+| image_generation.json | 独立生图公开配置，不含连接密钥 | 生图设置保存、模型变更 |
+| image_generation_quota.sqlite3 | 每日共享额度与散列请求状态 | 请求预占、完成或结果未知；重载不清零 |
 | Decision.timings | 参与判定阶段能力等待，含失败 | 能力、并发、配套采集接口变化 |
 
 `DecisionLog` 在 `decisions.jsonl` 超过 1 MiB 时轮转到时间戳归档，不覆盖已有归档；兼容旧 `.1`。启动倒序扫描多个文件，分块读取恢复最近 600 条有效 JSON，忽略坏行。默认/搜索最多返回 100 条，不承诺全历史搜索。退出或热重载强制保存当日计数，避免写盘节流遗漏最后计数。
@@ -118,7 +120,7 @@ LivingMemory 的 `core/retrieval/request_timing.py` 可通过请求局部 Contex
 | console/config | POST | 参数白名单保存 |
 | console/native-segments | GET / POST | 原生分段读取 / 版本校验保存 |
 | console/native-settings | GET / POST | 原生模型与固定人格 |
-| console/image-settings | GET / POST | BiliBot 全局图片公开设置 |
+| console/image-settings | GET / POST | 独立AI生图设置、模型/路由候选和每日额度 |
 | console/flow | GET | 判定及生成流程结构 |
 | console/probe | POST | 文字判定试跑，有 API 用量 |
 | console/reset | POST | 明确清零统计，保留日志 |

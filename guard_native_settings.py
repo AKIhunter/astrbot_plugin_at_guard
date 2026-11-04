@@ -24,10 +24,6 @@ FIELDS = {
                           "沿用AstrBot流式发送机制。与多消息分段同时开启时，请以原生流水线的实际行为为准。"),
     "persona_id": ("agent_runner.config.persona.persona_id", "人格", "原生人格（保存后固定）", "persona",
                    "手动选择并保存后固定此配置的人格，覆盖会话旧人格和从绫人格选择；不会因刷新或试跑自动换人。"),
-    "image_caption_provider_id": ("provider_settings.default_image_caption_provider_id", "图片理解", "图片转述模型", "vision",
-                                  "给文本模型提供图片描述。这是图片理解，不生成图片。留空不使用独立转述模型。"),
-    "image_caption_prompt": ("provider_settings.image_caption_prompt", "图片理解", "图片转述提示词", "text",
-                            "AstrBot图片理解时使用的提示词，保存到当前原生配置。"),
     "t2i": ("t2i", "文本排版转图", "启用文本排版转图", "bool",
             "把回复文字排版成图片，适合长回复；不是AI文生图。"),
     "t2i_word_threshold": ("t2i_word_threshold", "文本排版转图", "转图字数阈值", "int",
@@ -103,11 +99,6 @@ class NativeSettings(NativeReply):
                       persona_fixed=pin is not None, fixed_persona_id=pin,
                       persona_error=self.pin_error, local_runner=local)
         result["revision"] = revision({"values": data, "pin": pin, "pin_error": self.pin_error})
-        result["image_generation"] = {
-            "text_to_image": "AI文生图由BiliBot独立配置，展开下方配置组查看。",
-            "image_to_image": "当前AstrBot与BiliBot没有独立图生图模型配置入口。",
-            "image_to_image_available": False,
-        }
         return result
 
     def fixed_persona_id(self, umo):

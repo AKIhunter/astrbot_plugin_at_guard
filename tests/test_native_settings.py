@@ -12,7 +12,6 @@ import threading
 
 from guard_native_settings import NativeSettings
 from guard_native_reply import NativeReplyError
-from guard_image_settings import ImageSettings, FIELDS as IMAGE_FIELDS
 import test_native_reply as fixture
 
 
@@ -153,18 +152,10 @@ class NativeSettingsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("system_prompt",payload)
         self.assertNotIn("unrelated",payload)
 
-    async def test_image_settings_public_patch_retains_key_and_other_fields(self):
-        self.conf.update({key: 128 if key.endswith(("WIDTH","HEIGHT")) else 2
-                          if key.endswith(("STEPS","SCALE")) else "" for key in IMAGE_FIELDS})
-        self.conf["IMAGE_GEN_BACKEND"]="openai"
-        self.conf["IMAGE_GEN_API_KEY"]="secret-marker"
-        self.conf.save_config()
-        self.context.get_registered_star=lambda _: SimpleNamespace(activated=True,star_cls=SimpleNamespace(config=self.conf))
-        bridge=ImageSettings(self.context,self.bridge.lock)
-        self.assertNotIn("secret-marker",json.dumps(bridge.read()))
-        before=bridge.read()
-        saved=await bridge.save(dict(expected_revision=before["revision"],values={"IMAGE_GEN_MODEL":"image-b"}))
-        self.assertEqual(saved["values"]["IMAGE_GEN_MODEL"],"image-b")
-        self.assertEqual(json.loads(Path(self.conf.config_path).read_text(encoding="utf-8-sig"))["IMAGE_GEN_API_KEY"],"secret-marker")
+    async def test_removed_native_vision_fields_are_rejected_and_preserved_on_disk(self):
+        before=Path(self.conf.config_path).read_bytes()
+        self.assertNotIn("image_caption_provider_id",self.settings.read()["values"])
+        self.assertTrue(all(f["group"] != "图片理解" for f in self.settings.read()["fields"]))
         with self.assertRaises(NativeReplyError):
-            await bridge.save(dict(expected_revision=saved["revision"],values={"IMAGE_GEN_API_KEY":"replacement"}))
+            await self.settings.save(self.request,self.settings_body(image_caption_provider_id="chat-b"),self.providers)
+        self.assertEqual(Path(self.conf.config_path).read_bytes(),before)

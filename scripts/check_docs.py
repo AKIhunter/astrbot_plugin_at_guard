@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import ast
 import json
 from pathlib import Path
 import re
@@ -27,6 +28,27 @@ def anchors(text: str) -> set[str]:
         result.add(slug + suffix)
     result.update(re.findall(r'(?:id|name)=["\']([^"\']+)["\']', text))
     return result
+
+
+def literal_assignment(path: Path, name: str):
+    """解析源码常量，不导入插件或启动宿主。"""
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if not isinstance(node, ast.Assign) or not any(
+            isinstance(target, ast.Name) and target.id == name for target in node.targets
+        ):
+            continue
+        if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "dict":
+            return {keyword.arg: ast.literal_eval(keyword.value) for keyword in node.value.keywords}
+        return ast.literal_eval(node.value)
+    raise ValueError(f"{path.name} 缺少 {name}")
+
+
+def marked_table(text: str, marker: str, failures: list[str]) -> str:
+    match = re.search(rf"<!-- {marker}:start -->(.*?)<!-- {marker}:end -->", text, re.S)
+    if not match:
+        failures.append(f"缺少配置表标记: {marker}")
+        return ""
+    return match[1]
 
 
 def check(root: Path) -> list[str]:
@@ -56,7 +78,8 @@ def check(root: Path) -> list[str]:
 
     schema = json.loads((root / "_conf_schema.json").read_text(encoding="utf-8"))
     table = (root / "docs/configuration.md").read_text(encoding="utf-8")
-    rows = re.findall(r"(?m)^\| `([^`]+)` \| `([^`]+)` \| ([^|]+) \|$", table)
+    rows = re.findall(r"(?m)^\| `([^`]+)` \| `([^`]+)` \| ([^|]+) \|$",
+                      marked_table(table, "schema-defaults", failures))
     listed = {}
     for key, default, title in rows:
         if key in listed:
@@ -74,6 +97,30 @@ def check(root: Path) -> list[str]:
             failures.append(f"配置默认值过期: {key}")
         if title != schema[key]["description"]:
             failures.append(f"配置标题过期: {key}")
+
+    # 独立生图配置不在宿主schema中，直接以源码DEFAULTS核对。
+    defaults = literal_assignment(root / "guard_image_settings.py", "DEFAULTS")
+    image_rows = re.findall(r"(?m)^\| `([^`]+)` \| `([^`]+)` \|",
+                            marked_table(table, "image-defaults", failures))
+    image_listed = {}
+    for key, default in image_rows:
+        if key in image_listed:
+            failures.append(f"生图配置表重复字段: {key}")
+        try:
+            image_listed[key] = json.loads(default)
+        except ValueError:
+            failures.append(f"生图默认值不是JSON: {key}")
+    if set(image_listed) != set(defaults):
+        failures.append(f"生图配置表字段差异: {sorted(set(image_listed) ^ set(defaults))}")
+    for key in set(image_listed) & set(defaults):
+        if json.dumps(image_listed[key]) != json.dumps(defaults[key]):
+            failures.append(f"生图默认值过期: {key}")
+    native_fields = literal_assignment(root / "guard_native_settings.py", "FIELDS")
+    section = re.search(r"## AstrBot 原生字段\n(.*?)\n## AstrBot 原生分段", table, re.S)
+    native_rows = re.findall(r"(?m)^\| ([a-z0-9_]+) \| ([a-z0-9_.]+) \|", section[1] if section else "")
+    documented_native = dict(native_rows)
+    if documented_native != {key: value[0] for key, value in native_fields.items()}:
+        failures.append("原生字段及保存路径已变化，请同步配置参考")
 
     metadata = (root / "metadata.yaml").read_text(encoding="utf-8")
     required = {"name", "display_name", "short_desc", "desc", "version", "author",
@@ -108,5 +155,6 @@ if __name__ == "__main__":
         print(f"[FAIL] {error}")
     if not errors:
         count = len(json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8")))
-        print(f"[PASS] 文档链接、{count} 项配置默认值、版本、图片及 tests/ 布局")
+        image_count = len(literal_assignment(ROOT / "guard_image_settings.py", "DEFAULTS"))
+        print(f"[PASS] 文档链接、{count}+{image_count} 项默认值、原生字段、版本、图片及 tests/ 布局")
     sys.exit(bool(errors))

@@ -1,13 +1,15 @@
 name: astrbot_plugin_at_guard
 display_name: LivingHello
-short_desc: 先理解话题再决定是否接话，统一碎片等待、回复分段与原生配置。
+short_desc: 先理解再接话，统一回复、人格配置和按需AI生图。
 desc: >-
   在主回复生成前进行文字、记忆与图片分层参与判定，减少无关插话和无效生成。
   提供四页控制台、流程节点试跑、最近判定详情、碎片等待和原生分段。
-  桥接 AstrBot 模型与固定人格，可独立使用或与从绫配套；保留旧插件 ID 和数据目录。
+  统一原生模型、回退和固定人格，支持上下文0不限时间，可独立使用或与从绫配套。
+  独立文生图与图生图工具复用模型或路由上游连接，按日共享额度并持久去重。
 help: >-
   插件详情 → guard：判定设置、回复与私聊、流程与试跑。
-  /智能过滤统计：查看今日统计；文字试跑会产生判定 API 用量。
+  /智能过滤统计：查看今日统计；AI生图默认关闭，启用前选择支持生图的API。
+  文字试跑和生图会产生相应API用量。
 author: WorkBuddy
 repo: https://github.com/AKIhunter/astrbot_plugin_livinghello
 version: 2.7.0
@@ -17,4 +19,5 @@ tags:
   - 群聊参与
   - 回复分段
   - 原生配置
+  - AI生图
   - WebUI

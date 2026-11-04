@@ -544,15 +544,17 @@
   <div class="reply-stack">
     <section class="card" id="nativeSegments">
       <h2>原生配置</h2>
-      <p class="sub">模型、人格、图片和分段与AstrBot共用设置。先选原生配置，编辑后点击底部保存。</p>
+      <p class="sub">人格、主模型和分段与AstrBot共用，保存后生效。独立生图按需提供给主模型。</p>
       <label id="nativeProfileLabel" class="row" hidden>原生配置 <select id="nativeProfile" aria-label="原生配置"></select></label>
-      <div id="nativeSettingsFields"></div>
-      <details class="native-group"><summary>AI文生图（BiliBot全局） <button class="field-help-trigger" id="imageGroupHelp" aria-label="AI文生图说明">?</button></summary>
-        <p class="sub" id="imageSettingsStatus" role="status">读取中…</p><div id="imageSettingsFields"></div>
+      <div id="nativePersonaField"></div>
+      <p class="sub" id="nativePersonaStatus" role="status"></p>
+      <details class="native-group"><summary>编辑范围 <button class="field-help-trigger" id="profileScopeHelp" aria-label="编辑范围说明">?</button></summary>
+        <label class="row">AstrBot配置范围 <select id="nativeScope" aria-label="AstrBot配置范围"></select></label>
+        <p class="sub">会话使用哪个配置由AstrBot分配。这里的人格、模型与分段只保存到所选范围。</p>
       </details>
-      <details class="native-group"><summary>AI图生图 <button class="field-help-trigger" id="i2iGroupHelp" aria-label="AI图生图说明">?</button></summary>
-        <p class="sub">当前AstrBot和BiliBot没有独立图生图配置入口。需要支持图生图的插件或服务后才能接入。</p>
-        <label class="row">图生图模型<select disabled aria-label="图生图模型"><option>暂无可接入模型</option></select></label>
+      <div id="nativeSettingsFields"></div>
+      <details class="native-group"><summary>AI生图（文生图 / 图生图） <button class="field-help-trigger" id="imageGroupHelp" aria-label="AI生图说明">?</button></summary>
+        <p class="sub" id="imageSettingsStatus" role="status">读取中…</p><div id="imageSettingsFields"></div>
       </details>
       <details class="native-group" open><summary>原生分段回复</summary>
       <div id="nativeSegmentFields"></div>
@@ -616,6 +618,13 @@
   <button class="primary" id="saveBarSave">保存更新</button>
 </div>
 
+<style>
+.fallback-list { display:flex; flex-direction:column; align-items:stretch; grid-column:1 / -1; gap:8px; min-width:0; }
+.fallback-item { display:flex; gap:6px; align-items:center; min-width:0; }
+.fallback-item select { flex:1; min-width:0; width:0; }
+.fallback-item button { flex:none; padding:6px 10px; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); color:var(--text); font:inherit; cursor:pointer; }
+.fallback-list > button { align-self:flex-start; }
+</style>
 <script>
 (function () {
   // bridge 由宿主注入在 body 末尾、即本内联脚本之后，所以不能在这里立即
@@ -664,7 +673,58 @@
     const title = document.createElement("div"); title.className = "field-title";
     const label = document.createElement("label"); label.htmlFor = prefix + key; label.textContent = field.title;
     title.append(label, helpButton(field.title, field.help));
-    const select = ["provider","providers","vision","persona","strategy","backend"].includes(kind);
+    const changed = next => {
+      if (key !== "persona_id" && JSON.stringify(next) === JSON.stringify(data.values[key])) delete draft[key];
+      else draft[key] = next;
+      el("nativeProfile").disabled = el("nativeScope").disabled = nativeDirty() > 0;
+      showSaveBar();
+      el("nativeStatus").textContent = "有配置更改，保存后生效";
+    };
+    if (kind === "providers") {
+      // 每个回退项使用与主模型相同的原生下拉，顺序就是回退顺序。
+      const cell = document.createElement("div"); cell.className="field-control fallback-list";
+      let selected = Array.isArray(value) ? [...value] : [];
+      const candidates = (data.providers || []).map(p=>[p.id,
+        (p.display || p.id) + (p.model && p.model !== p.display ? " · "+p.model : "")]);
+      const disabled = nativeSaving || nativeLoading || state.saving;
+      const commit = () => changed(selected.filter(Boolean));
+      const paint = () => {
+        cell.replaceChildren();
+        selected.forEach((v,index)=>{
+          const line=document.createElement("div"); line.className="fallback-item";
+          const input=document.createElement("select");
+          input.id=prefix+key+"-"+index; input.setAttribute("aria-label","回退模型 "+(index+1));
+          input.add(new Option("请选择回退模型",""));
+          candidates.forEach(([id,text])=>input.add(new Option(text,id)));
+          if(v && !candidates.some(c=>c[0]===v)) input.add(new Option(v+"（当前不可用，请更换）",v));
+          input.value=v; input.disabled=disabled;
+          input.addEventListener("change",()=>{
+            if(input.value && selected.some((id,j)=>j!==index && id===input.value)) {
+              input.value=selected[index]; nativeHelp("回退模型","同一个回退模型只能选择一次。"); return;
+            }
+            selected[index]=input.value; commit();
+          });
+          line.append(input);
+          const move=document.createElement("button"); move.type="button"; move.textContent="↑";
+          move.setAttribute("aria-label","将回退模型 "+(index+1)+" 上移");
+          move.disabled=disabled || index===0;
+          move.addEventListener("click",()=>{
+            [selected[index-1],selected[index]]=[selected[index],selected[index-1]];
+            commit();paint();
+          });
+          const remove=document.createElement("button"); remove.type="button"; remove.textContent="移除";
+          remove.setAttribute("aria-label","移除回退模型 "+(index+1));remove.disabled=disabled;
+          remove.addEventListener("click",()=>{selected.splice(index,1);commit();paint();});
+          line.append(move,remove);cell.append(line);
+        });
+        const add=document.createElement("button");add.type="button";add.textContent="添加回退模型";
+        add.disabled=disabled || selected.length>=20;
+        add.addEventListener("click",()=>{selected.push("");paint();cell.querySelector("select:last-of-type")?.focus();});
+        cell.append(add);
+      };
+      paint();row.append(title,cell);return row;
+    }
+    const select = ["provider","vision","persona","strategy","protocol","size"].includes(kind);
     const input = document.createElement(select ? "select" : kind === "text" ? "textarea" : "input");
     input.id = prefix + key;
     if (select) {
@@ -672,25 +732,25 @@
       if (["provider","providers","vision"].includes(kind)) {
         options = (data.providers || []).filter(p => kind !== "vision" || p.supports_images)
           .map(p => [p.id, (p.display || p.id) + (p.model && p.model !== p.display ? " · " + p.model : "")]);
-        if (kind !== "providers") options.unshift(["", kind === "vision" ? "不使用独立转述模型" : "使用宿主默认模型"]);
+        options.unshift(["", prefix === "image-" ? "请选择生图模型（启用前必选）"
+          : kind === "vision" ? "选择图片理解模型" : "使用宿主默认模型"]);
       } else if (kind === "persona") options = [["[%None]", "不使用人格"], ...(data.personas || []).map(p=>[p.id,p.name])];
-      else options = kind === "strategy" ? [["remote","远程渲染"],["local","本地渲染"]] : [["openai","OpenAI兼容"],["novelai","NovelAI"]];
+      else options = kind === "strategy" ? [["remote","远程渲染"],["local","本地渲染"]]
+        : kind === "protocol" ? [["images","标准图片接口（生成 / 编辑）"],["chat_images","对话生图接口（image模态）"]]
+        : [["auto","服务自动选择"],["1024x1024","1024 × 1024"],["1536x1024","1536 × 1024"],["1024x1536","1024 × 1536"]];
       const selected = Array.isArray(value) ? value : [value];
       selected.forEach(v => { if (!options.some(o=>o[0] === v)) options.push([v, v + "（当前不可用，请手动更换）"]); });
       options.forEach(([v,t]) => input.add(new Option(t,v,false,selected.includes(v))));
-      if (kind === "providers") { input.multiple = true; input.size = 3; }
     } else if (kind === "bool") { input.type="checkbox"; input.checked=!!value; }
     else { input.type = ["int","float"].includes(kind) ? "number" : "text"; input.value = value ?? ""; }
     if (["int","float"].includes(kind)) input.step = kind === "float" ? "0.1" : "1";
+    if (key==="daily_limit") {input.min="0";input.max="1000";}
+    if (key==="timeout_seconds") {input.min="10";input.max="180";}
     input.disabled = nativeSaving || nativeLoading || state.saving;
     input.addEventListener(select || kind === "bool" ? "change" : "input", () => {
-      const next = kind === "bool" ? input.checked : kind === "providers" ? [...input.selectedOptions].map(o=>o.value)
+      const next = kind === "bool" ? input.checked
         : ["int","float"].includes(kind) ? Number(input.value) : input.value;
-      if (key !== "persona_id" && JSON.stringify(next) === JSON.stringify(data.values[key])) delete draft[key];
-      else draft[key] = next;
-      el("nativeProfile").disabled = nativeDirty() > 0;
-      showSaveBar();
-      el("nativeStatus").textContent = "有原生配置更改，保存后生效";
+      changed(next);
     });
     const cell = document.createElement("div"); cell.className = kind === "bool" ? "native-toggle" : "field-control";
     cell.append(input); row.append(title,cell); return row;
@@ -701,7 +761,23 @@
       const opened = new Set([...host.querySelectorAll("details[open]")].map(d=>d.dataset.group));
       const initial = !host.children.length;
       host.replaceChildren();
-      const groups = [...new Set(settingsData.fields.map(f=>f.group))];
+      const personaHost=el("nativePersonaField");personaHost.replaceChildren();
+      const persona=settingsData.fields.find(f=>f.key==="persona_id");
+      if(persona) personaHost.append(settingsControl(persona,settingsData,settingsDraft,"setting-"));
+      el("nativePersonaStatus").textContent=settingsData.persona_error ? "固定人格数据异常，请恢复备份。" :
+        !persona ? "当前外部Agent的人格请到对应Agent设置。" :
+        settingsData.persona_fixed ? "已固定：" + settingsData.fixed_persona_id + "；手动更换并保存后更新。" :
+        "选择或确认当前人格，再保存即可固定。";
+      if(persona && !settingsData.persona_fixed && !settingsData.persona_error) {
+        const confirm=document.createElement("button");confirm.type="button";confirm.textContent="固定当前人格";
+        confirm.disabled=nativeLoading || nativeSaving || state.saving;
+        confirm.addEventListener("click",()=>{
+          settingsDraft.persona_id=el("setting-persona_id").value;
+          el("nativeScope").disabled=el("nativeProfile").disabled=true;showSaveBar();
+        });
+        personaHost.append(confirm);
+      }
+      const groups = [...new Set(settingsData.fields.filter(f=>f.key!=="persona_id").map(f=>f.group))];
       groups.forEach(group => {
         const details=document.createElement("details"); details.className="native-group"; details.dataset.group=group;
         details.open = initial ? group === "模型" || group === "人格" : opened.has(group);
@@ -737,7 +813,8 @@
     if (imageData) {
       el("imageSettingsFields").replaceChildren();
       el("imageSettingsStatus").textContent=imageData.available
-        ? imageData.scope + "。更改会影响BiliBot动态配图。密钥" + (imageData.key_configured ? "已配置" : "未配置") + "，请在原插件中编辑密钥。"
+        ? imageData.scope + "。今日已用 " + imageData.usage.used + " / " + imageData.usage.limit
+          + " 次。主模型按需调用，图生图使用本次输入图片。"
         : imageData.reason;
       if (imageData.available) imageData.fields.forEach(f=>
         el("imageSettingsFields").append(settingsControl(f,imageData,imageDraft,"image-")));
@@ -869,7 +946,10 @@
     profile.replaceChildren(...nativeData.profiles.map(p => new Option(p.name, p.id)));
     profile.value = nativeData.config_id;
     profile.disabled = nativeSaving || nativeLoading || state.saving || nativeDirty() > 0;
-    el("nativeProfileLabel").hidden = nativeData.profiles.length <= 1;
+    el("nativeProfileLabel").hidden = true;
+    const scope=el("nativeScope");
+    scope.replaceChildren(...nativeData.profiles.map(p=>new Option(p.name,p.id)));
+    scope.value=nativeData.config_id;scope.disabled=profile.disabled;
     if (focusId?.startsWith("native-") && !el(focusId)?.disabled) el(focusId)?.focus({preventScroll:true});
     renderNativeSettings();
   }
@@ -1053,7 +1133,7 @@
   ];
   const CONTEXT_FIELDS = [
     { key: "gate_context_messages", label: "判定流水条数", type: "number", min: 0, max: 30, step: 1, unit: "条" },
-    { key: "gate_context_max_age_seconds", label: "上下文有效期", type: "number", min: 30, max: 3600, step: 1, unit: "秒" },
+    { key: "gate_context_max_age_seconds", label: "上下文有效期（0不限时间）", type: "number", min: 0, max: 3600, step: 1, unit: "秒" },
     { key: "gate_memory_timeout_seconds", label: "记忆检索超时", type: "number", min: 0.2, max: 5, step: 0.1, unit: "秒" },
     { key: "participation_context_messages", label: "回复上下文条数", type: "number", min: 2, max: 30, step: 1, unit: "条" },
   ];
@@ -1114,7 +1194,7 @@
     gate_main_fallback_enabled: { desc: "多模态模型异常时，让当前会话主模型再判断一次；主模型必须支持图片。", ex: "开启：多模态接口报错 → 主模型兜底；多模态正常说「不该回」就到此结束。" },
     gate_main_fallback_timeout_seconds: { desc: "开启主模型兜底时，限制这次兜底调用的等待时间。", ex: "设 6 秒：主模型兜底超过 6 秒也未返回，保持静默。" },
     gate_context_messages: { desc: "参与判断参考多少条近期群聊，包含机器人发言。越多越费输入 Token。", ex: "设 12 条：让小模型参考最近 12 条流水；设 0 不附近期流水。" },
-    gate_context_max_age_seconds: { desc: "只参考这段时间内的流水、机器人上一句及近期图片，避免把旧话题当新话题。", ex: "设 300 秒：5 分钟前的发言不再用于判断当前话题。" },
+    gate_context_max_age_seconds: { desc: "0表示不筛选时间，只按判定流水条数取近期消息；正数允许30~3600秒。机器人上一句及引用图片遵循同一规则，字符限制和会话隔离保留；不改变回复机会有效期。", ex: "设0，判定流水8条：保留最近8条，即使消息间隔超过一小时。" },
     gate_memory_timeout_seconds: { desc: "只有缺少历史背景时，才按当前会话和人格查记忆，最多补查一次。", ex: "设 1.5 秒：「昨天那件事后来呢？」需要查背景，检索超时或没有证据就静默。" },
     participation_context_messages: { desc: "放行后给主模型补充多少条近期群聊，帮助它写回复；与判定流水条数独立。", ex: "设 12 条：主模型生成时补充最近 12 条流水；不会改变小模型的判定条数。" },
     gate_hourly_budget: { desc: "每群每小时判定调用的总上限；文字、看图、兜底及记忆复判都计入。0 表示不限。", ex: "设 120 次：一条消息若用了文字和看图两层，就占 2 次，而不是 1 条消息。" },
@@ -1143,7 +1223,7 @@
     gate_main_fallback_enabled: "关闭：多模态调用失败后直接静默，不再让会话主模型重复看图。",
     gate_main_fallback_timeout_seconds: "设 2 秒：兜底模型响应较慢时会更快静默，减少整条链路等待。",
     gate_context_messages: "设 4 条：降低输入 Token，但较长对话中的指代更容易缺少背景。",
-    gate_context_max_age_seconds: "设 60 秒：只认最近一分钟的对话，适合话题切换很快的群。",
+    gate_context_max_age_seconds: "设300秒，判定流水8条：只从最近5分钟里取最多8条。设0仍不会读取全部历史。",
     gate_memory_timeout_seconds: "设 3 秒：允许记忆检索等待更久，但整条判定仍受总时限约束。",
     participation_context_messages: "设 6 条：回复模型只补最近 6 条群聊，不影响前面的参与判定。",
     gate_hourly_budget: "设 0：不设独立总预算，仍受超时和视觉预算等其它限制。",
@@ -2167,7 +2247,7 @@
     if (Object.keys(imageDraft).length) {
       try {
         imageData=await apiPost("console/image-settings",{expected_revision:imageData.revision,values:imageDraft});
-        imageDraft={}; saved.push("BiliBot全局文生图已保存");
+        imageDraft={}; saved.push("独立AI生图已保存并生效");
       } catch(err) { errors.push("文生图保存失败："+err.message); }
     }
     if (Object.keys(nativeDraft).length) {
@@ -2259,12 +2339,16 @@
     if (nativeDirty()) { el("nativeProfile").value=nativeData.config_id; return; }
     loadNative(el("nativeProfile").value);
   });
+  el("nativeScope").addEventListener("change",()=>{
+    if(nativeDirty()){el("nativeScope").value=nativeData.config_id;return;}
+    loadNative(el("nativeScope").value);
+  });
+  el("profileScopeHelp").addEventListener("click",ev=>{
+    ev.preventDefault();nativeHelp("编辑范围","默认沿用已保存的AstrBot配置范围。人格、主模型、回退和分段只保存到此范围；实际会话分配仍由AstrBot管理。");
+  });
   el("flowReload").addEventListener("click", loadFlow);
   el("imageGroupHelp").addEventListener("click",ev=>{
-    ev.preventDefault();nativeHelp("AI文生图","这里同步BiliBot现有文生图参数，所有会话共用，供动态配图使用。不是AstrBot原生绘图模型，也不会自动给普通聊天添加绘图能力。密钥请在BiliBot原配置中修改。");
-  });
-  el("i2iGroupHelp").addEventListener("click",ev=>{
-    ev.preventDefault();nativeHelp("AI图生图","当前宿主没有可桥接的图生图入口。图片理解和文本排版转图均不是图生图；需要提供实际绘图插件或服务接口。");
+    ev.preventDefault();nativeHelp("AI生图","独立于BiliBot。选择AstrBot模型或多API路由的具体上游，使用已保存连接；API必须支持生图。主模型通过工具按需生成或编辑本次图片，按服务器自然日共用次数上限。每次请求计数，0禁止；超时和结果未知不自动重试。");
   });
   window.addEventListener("resize",()=>["gateGraph","generateGraph"].forEach(id=>drawArrows(el(id))));
   el("decisionCategories").addEventListener("click", ev => {
