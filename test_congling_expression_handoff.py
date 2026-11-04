@@ -1,8 +1,10 @@
 """执行从绫实际交接方法，隔离框架初始化、平台发送和数据库写入。"""
 import ast
+import importlib.util
 import logging
 import os
 from pathlib import Path
+import sys
 import time
 from types import SimpleNamespace
 import unittest
@@ -37,10 +39,20 @@ def methods(relative, selected):
         "Block": SimpleNamespace, "PerceivedMessage": PerceivedMessageStub,
         "component_to_block": lambda comp: SimpleNamespace(kind="text", text=comp.text),
         "blocks_to_text": lambda blocks: "\n".join(block.text for block in blocks),
-        "add_temp_part": lambda req, text, marker: req.parts.append((text, marker)),
+        "add_temp_part": lambda req, text, marker, **kwargs: req.parts.append((text, marker)),
         "MARKER_PREFIX": "<!--congling:perceived:",
         "SELF_ACTION_RULE": "原生身份", "DREAM_RECALL_RULE": "原生隐私",
     }
+    # 从绫新增来源记录后，编译交接方法也要装配真实辅助函数；正文捕获仍隔离。
+    helper_path = ROOT / "core/prompt_parts.py"
+    if helper_path.is_file():
+        module_name = "handoff_prompt_parts_test"
+        spec = importlib.util.spec_from_file_location(module_name, helper_path)
+        helper = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = helper
+        spec.loader.exec_module(helper)
+        namespace.update({name: getattr(helper, name) for name in
+                          ("request_temp_source", "next_temp_version") if hasattr(helper, name)})
     exec(compile(ast.Module(body=nodes, type_ignores=[]), str(ROOT / relative), "exec"), namespace)
     return SimpleNamespace(**{name: namespace[name] for name in selected})
 

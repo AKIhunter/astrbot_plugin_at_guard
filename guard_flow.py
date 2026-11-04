@@ -1,0 +1,111 @@
+"""由真实Decision构建可解释流程；文字试跑不会执行主回复生成。"""
+from __future__ import annotations
+
+import copy
+
+GATE = [
+    ("input", "候选输入", "取得当前消息、上一句、上下文；群聊明确呼叫与公开监听采用不同入口。"),
+    ("fragment", "碎片等待与撤回", "等待同一用户的碎片消息；只在等待窗口内拦截撤回。文字试跑不模拟平台事件。"),
+    ("rules", "本地规则与预算", "检查最短长度、有效内容和每群小时预算。试跑跳过预算计数；规则不通过立即静默。"),
+    ("context", "组织判定上下文", "读取已保存的上下文窗口，按从旧到新组织流水、上一句和当前消息；用户内容作为不可信数据。"),
+    ("text", "文字模型初判", "返回动作、参与分数、理解状态、依据类型和原因。协议不完整或超时按静默处理。"),
+    ("memory", "按需记忆与复判", "只有模型需要记忆时补查一次；命中后复判，未找到不能猜。文字试跑不读取真实用户记忆。"),
+    ("vision", "必要时看图", "只有需要画面证据时调用视觉模型；有效静默结论不触发兜底。文字试跑不上传原图。"),
+    ("fallback", "视觉异常主模型兜底", "仅视觉接口或协议异常才尝试不同主模型；预算耗尽或总时限到期不兜底。"),
+    ("veto", "语义否决与分数修正", "互聊、停口、已答、无价值、未理解等原因优先否决。分数压至20或40，阈值为0也不能越过。"),
+    ("threshold", "比较已保存阈值", "没有语义否决且修正分数达到阈值才放行。"),
+    ("result", "判定结果", "硬闸门未通过不生成；观察模式仅记录判断，旧行为先生成再丢弃；关闭模式不做参与判断。"),
+]
+GENERATE = [
+    ("native", "选原生模型与固定人格", "按当前会话的原生配置选主模型。页面保存的人格在宿主选择入口生效，从绫也复用同一选择。"),
+    ("perception", "复用感知与图片证据", "从绫启用时使用从绫感知；独立模式使用内容理解配置。充分图片摘要优先复用，不足时传原图。"),
+    ("retrieve", "补足话题依据", "复用本次记忆、联网搜索和向量查询结果；确实缺信息时由主模型按工具能力补查。"),
+    ("writeback", "证据与记忆回写", "同次请求复用查询缓存；有效长期事实可由记忆工具回写，避免后续反复查询。是否调用由实际工具执行记录确认。"),
+    ("generate", "主模型生成正文", "以当前问题、已验证证据及唯一人格生成回复。主模型接口失败时按原生设置重试和回退。"),
+    ("segments", "正文清理与分段", "模型自行分段和多消息发送独立。第二句号、分段词需各自开启；最多分段数超出后合并保留正文。"),
+    ("freshness", "最后一次时效检查", "检查当前消息是否被新消息替代、重复、超时或等待窗口内撤回；从绫准备耗时按配套设置扣除。"),
+    ("send", "原生发送", "经AstrBot原生管线处理TTS、文本排版转图、引用与@并发送；文字试跑到此仅展示计划。"),
+]
+GATE_EDGES = [
+    ("input", "fragment", "线上入口"), ("fragment", "rules", "窗口内未撤回"),
+    ("rules", "context", "规则通过"), ("rules", "result", "短路静默"),
+    ("context", "text", "送入模型"), ("text", "memory", "需要记忆"),
+    ("text", "vision", "需要画面"), ("text", "veto", "证据足够"),
+    ("memory", "text", "命中后复判"), ("memory", "veto", "无记忆/复判完成"),
+    ("vision", "fallback", "接口或协议异常"), ("vision", "veto", "有效结论"),
+    ("fallback", "veto", "兜底成功"), ("veto", "threshold", "无语义否决"),
+    ("veto", "result", "否决静默"), ("threshold", "result", "放行/静默"),
+]
+
+
+def graph(rows, edges):
+    return {"nodes": [dict(id=k, title=t, explanation=e, status="unrecorded", evidence={})
+                      for k, t, e in rows],
+            "edges": [dict(source=a, target=b, label=c) for a, b, c in edges]}
+
+
+def build_flow(config, native=None, decision=None, inputs=None):
+    gate = graph(GATE, GATE_EDGES)
+    generate = graph(GENERATE, [(GENERATE[i][0], GENERATE[i + 1][0], "下一步")
+                               for i in range(len(GENERATE) - 1)])
+    nodes = {n["id"]: n for n in gate["nodes"]}
+    plan = {n["id"]: n for n in generate["nodes"]}
+    native = native or {}
+    values = native.get("values", {})
+    for node in plan.values():
+        node.update(status="planned", evidence={"执行状态": "仅生成计划，未调用主模型或发送消息"})
+    plan["native"]["evidence"].update(
+        原生配置=native.get("config_id", "default"),
+        主模型=values.get("provider_id") or "宿主默认",
+        原生人格=values.get("persona_id", "当前宿主不支持"),
+        固定人格=native.get("fixed_persona_id") or "尚未由此页固定",
+        回退模型=values.get("fallback_provider_ids", []))
+    plan["perception"]["evidence"].update(
+        图片理解=values.get("image_caption_provider_id") or "未配置独立转述",
+        说明="从绫启用状态与具体工具结果需以实际会话记录为准")
+    plan["send"]["evidence"]["文本排版转图"] = values.get("t2i", False)
+    nodes["rules"]["evidence"] = dict(最短长度=config.get("gate_min_length", 2),
+                                        小时预算=config.get("gate_hourly_budget", 120))
+    nodes["threshold"]["evidence"] = {"阈值": config.get("participation_confidence_threshold", 60)}
+    nodes["result"]["evidence"] = {"工作模式": config.get("gate_mode", "enforce")}
+    if decision is not None:
+        d = decision.as_dict()
+        raw = getattr(decision, "raw", "")
+        inputs = inputs or {}
+        nodes["input"].update(status="passed", evidence=copy.deepcopy(inputs))
+        nodes["fragment"].update(status="skipped", evidence={"原因": "文字试跑不执行平台碎片等待与撤回"})
+        early = d["source"] in {"rule", "error"} and not d["attempts"]
+        nodes["rules"]["status"] = "blocked" if d["source"] == "rule" else "passed"
+        nodes["rules"]["evidence"].update(预算="试跑跳过计数与预算消耗", 结果=d["reason"] if d["source"] == "rule" else "本地规则通过")
+        nodes["context"].update(status="skipped" if early else "passed",
+                                evidence={"送给模型的数据": d.get("chat_data", {}),
+                                          "是否发送": not early})
+        for key, stage in (("text", "text"), ("vision", "vision"), ("fallback", "main_fallback")):
+            attempts = [a for a in d["attempts"] if a.get("stage") == stage]
+            node = nodes[key]
+            node["status"] = ("passed" if attempts[-1].get("status") == "ok" else "error") if attempts else "skipped"
+            node["evidence"] = {"实际尝试": attempts, "原因": "查看实际尝试中的模型、耗时和结果" if attempts
+                                else ("取判定模型失败" if key == "text" and d["reason"] == "no_provider"
+                                      else "本次未执行此分支")}
+        metric = d.get("timings", {}).get("memory")
+        nodes["memory"].update(status="passed" if metric else "skipped",
+                               evidence={"实际耗时记录": metric, "命中记忆": list(decision.memory_lines),
+                                         "说明": "文字试跑不读取真实用户记忆，缺失记忆会否决"})
+        successful = d["source"] == "model"
+        nodes["veto"].update(status=("blocked" if d["action"] == "silence" and d["reason"] != "below_threshold"
+                                    else "passed") if successful else "skipped",
+                             evidence={"模型动作": d["act"], "已理解": d["understood"], "依据类型": d["ground"],
+                                       "模型原因": d["model_reason"], "原分数": d["raw_score"],
+                                       "修正分数": d["score"], "最终模型原话": raw})
+        nodes["threshold"].update(status=("passed" if d["action"] == "reply" else "blocked") if successful else "skipped",
+                                  evidence={"修正分数": d["score"], "阈值": d["threshold"],
+                                            "说明": "阈值通过仍不能绕过语义否决"})
+        nodes["result"].update(status="passed" if d["action"] == "reply" else "blocked",
+                               evidence={"动作": d["action"], "原因": d["reason"],
+                                         "实际模型调用数": d["model_calls"], "判定总耗时ms": d["latency_ms"],
+                                         "工作模式": config.get("gate_mode", "enforce")})
+        if d["action"] != "reply" and config.get("gate_mode", "enforce") == "enforce":
+            for node in plan.values():
+                node.update(status="skipped", evidence={**node["evidence"], "原因": "硬闸门未放行，线上不会生成"})
+    return {"gate": gate, "generate": generate,
+            "note": "点击节点查看依据。试跑仅执行判定；生成部分始终为计划。未采集的数据不等于0耗时。"}

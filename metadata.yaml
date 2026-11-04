@@ -1,7 +1,7 @@
 name: astrbot_plugin_at_guard
-display_name: 智能过滤插件
+display_name: LivingHello
 desc: 以0-100参与适合度判断机器人是否接话；支持文字/多模态分层判断、图片摘要传给回复模型、静默否决、预算时限、可读判定详情及参数控制台。
 author: WorkBuddy
-repo: https://github.com/AKIhunter/astrbot_plugin_at_guard
+repo: https://github.com/AKIhunter/astrbot_plugin_livinghello
 version: 2.7.0
 astrbot_version: ">=4.29.1"

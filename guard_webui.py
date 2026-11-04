@@ -25,11 +25,17 @@ try:
     from .guard_expression_help import HELP as EXPRESSION_HELP
     from .guard_understanding import audio_capable
     from .guard_native_reply import NativeReply, NativeReplyError
+    from .guard_native_settings import NativeSettings
+    from .guard_image_settings import ImageSettings
+    from .guard_flow import build_flow
 except ImportError:
     from guard_media import image_target
     from guard_expression_help import HELP as EXPRESSION_HELP
     from guard_understanding import audio_capable
     from guard_native_reply import NativeReply, NativeReplyError
+    from guard_native_settings import NativeSettings
+    from guard_image_settings import ImageSettings
+    from guard_flow import build_flow
 
 PLUGIN_NAME = "astrbot_plugin_at_guard"
 SCHEMA_PATH = Path(__file__).resolve().parent / "_conf_schema.json"
@@ -463,6 +469,53 @@ def _native(plugin):
     return plugin._native_reply
 
 
+def _native_settings(plugin):
+    if not hasattr(plugin, "_native_settings"):
+        plugin._native_settings = NativeSettings(plugin, _native(plugin))
+    return plugin._native_settings
+
+
+def _image_settings(plugin):
+    return ImageSettings(plugin.context, _native(plugin).lock)
+
+
+async def handle_native_settings(plugin):
+    try:
+        data = _native_settings(plugin).read(request.query.get("config_id", "default"))
+        data["providers"] = [p for p in await _providers(plugin) if p.get("role") == "chat"
+                             and p.get("kind") != "router_upstream"]
+        return _response(data)
+    except NativeReplyError as exc:
+        return _failure(str(exc), exc.status)
+
+
+async def handle_save_native_settings(plugin):
+    try:
+        return _response(await _native_settings(plugin).save(
+            request, await request.json(default={}), await _providers(plugin)))
+    except NativeReplyError as exc:
+        return _failure(str(exc), exc.status)
+
+
+async def handle_image_settings(plugin):
+    return _response(_image_settings(plugin).read())
+
+
+async def handle_save_image_settings(plugin):
+    try:
+        return _response(await _image_settings(plugin).save(await request.json(default={})))
+    except NativeReplyError as exc:
+        return _failure(str(exc), exc.status)
+
+
+async def handle_flow(plugin):
+    try:
+        native = _native_settings(plugin).read(request.query.get("config_id", "default"))
+        return _response(build_flow(plugin.config, native))
+    except NativeReplyError as exc:
+        return _failure(str(exc), exc.status)
+
+
 async def handle_native_segments(plugin):
     try:
         return _response(_native(plugin).read(request.query.get("config_id", "default")))
@@ -498,11 +551,23 @@ async def handle_probe(plugin: Any):
         body = await request.json(default={})
     except Exception:
         return _failure("请求体必须是 JSON")
-    text = str((body or {}).get("text", "") or "").strip()
+    if not isinstance(body, dict):
+        return _failure("请求体必须是JSON对象")
+    text = str(body.get("text", "") or "").strip()
     if not text:
         return _failure("请输入要试跑的消息")
     bot_line = str((body or {}).get("bot_line", "") or "").strip()
     is_private = bool((body or {}).get("private", False))
+    if len(text) > 800 or len(bot_line) > 2000:
+        return _failure("待判定消息最多800字，上一句最多2000字")
+    context_lines = body.get("context_lines", [])
+    if (not isinstance(context_lines, list) or len(context_lines) > 30 or
+            any(not isinstance(line, str) or len(line) > 800 for line in context_lines)):
+        return _failure("上下文最多30条，每条最多800字")
+    try:
+        native = _native_settings(plugin).read(body.get("config_id", "default"))
+    except NativeReplyError as exc:
+        return _failure(str(exc), exc.status)
 
     async def resolve_provider():
         provider_id = plugin.engine.provider_id()
@@ -510,13 +575,16 @@ async def handle_probe(plugin: Any):
             provider = plugin.context.get_provider_by_id(provider_id)
             if provider is not None:
                 return provider
+        provider_id = native["values"].get("provider_id")
+        if provider_id:
+            return plugin.context.get_provider_by_id(provider_id)
         return await plugin.context.get_using_provider_async(None)
 
     try:
         decision = await plugin.engine.decide(
             group_key="#probe",
             current_text=text,
-            context_lines=[],
+            context_lines=context_lines,
             bot_line=bot_line,
             is_private=is_private,
             resolve_provider=resolve_provider,
@@ -531,6 +599,9 @@ async def handle_probe(plugin: Any):
             "decision": decision.as_dict(),
             "raw": decision.raw,
             "checkedAt": int(time.time()),
+            "flow": build_flow(plugin.config, native, decision, {
+                "消息": text, "上一句": bot_line, "上下文": context_lines,
+                "场景": "私聊" if is_private else "群聊", "原生配置": native["config_id"]}),
         }
     )
 
@@ -542,6 +613,11 @@ def register_webui(plugin: Any, context: Context) -> None:
         ("console/config", "POST", handle_config, "保存智能过滤参数"),
         ("console/native-segments", "GET", handle_native_segments, "读取AstrBot原生分段配置"),
         ("console/native-segments", "POST", handle_save_native_segments, "同步AstrBot原生分段配置"),
+        ("console/native-settings", "GET", handle_native_settings, "读取原生模型与人格配置"),
+        ("console/native-settings", "POST", handle_save_native_settings, "保存原生模型与固定人格"),
+        ("console/image-settings", "GET", handle_image_settings, "读取BiliBot文生图配置"),
+        ("console/image-settings", "POST", handle_save_image_settings, "保存BiliBot全局文生图配置"),
+        ("console/flow", "GET", handle_flow, "读取判定与生成流程"),
         ("console/reset", "POST", handle_reset, "清零智能过滤统计"),
         ("console/probe", "POST", handle_probe, "试跑一次参与判定"),
     ]

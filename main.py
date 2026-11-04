@@ -271,6 +271,9 @@ class Main(Star):
         await self._delivery().prepare(event)
 
     async def terminate(self):
+        native_settings = getattr(self, "_native_settings", None)
+        if native_settings is not None:
+            native_settings.close()
         # 热重载前冲刷节流统计，保存设置不能导致最近几秒的计数回退。
         engine = getattr(self, "engine", None)
         if engine is not None:
@@ -286,6 +289,11 @@ class Main(Star):
         engine = getattr(self, "engine", None)
         return engine.mode() if engine is not None else "off"
 
+    def get_fixed_native_persona_id(self, umo):
+        """供从绫复用同一已保存人格；None表示未由此页固定。"""
+        settings = getattr(self, "_native_settings", None)
+        return settings.fixed_persona_id(umo) if settings is not None else None
+
     async def initialize(self) -> None:
         """Register the console bridge, then install bot names as wake prefixes."""
         try:
@@ -294,6 +302,16 @@ class Main(Star):
             register_webui(self, self.context)
         except Exception as exc:
             self.logger.warning(f"[智能过滤] 控制台注册失败: {exc!r}")
+
+        try:
+            if getattr(self.context, "persona_manager", None) is not None:
+                try:
+                    from .guard_webui import _native_settings
+                except ImportError:
+                    from guard_webui import _native_settings
+                _native_settings(self).install()
+        except Exception as exc:
+            self.logger.warning(f"[LivingHello] 原生人格固定入口安装失败: {exc!r}")
 
         if self._gate_mode() == "off":
             self.logger.info("[智能过滤] gate_mode=off，不注册称呼唤醒词；表达与撤回保护由独立开关控制")
