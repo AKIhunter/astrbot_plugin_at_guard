@@ -363,7 +363,7 @@ class HardGateTest(unittest.TestCase):
 
         self.assertFalse(event.stopped)
         self.assertTrue(req.extra_user_content_parts)
-        self.assertTrue(any("<recent_group_context" in part.text for part in req.extra_user_content_parts))
+        self.assertTrue(any("<at_guard_topic" in part.text for part in req.extra_user_content_parts))
         self.assertEqual(event.get_extra("_at_guard_confidence_score"), 88)
         self.assertEqual(instance.participation_stats["allowed"], 1)
 

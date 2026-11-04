@@ -447,8 +447,12 @@ async def handle_decisions(plugin: Any):
     if params is None:
         params = getattr(request, "args", {})
     query = str(params.get("query", "") or "")[:120]
+    category = str(params.get("category", "") or "")
+    if category not in {"", "private", "group", "public"}:
+        return _failure("判定分类无效", 400)
     return _response({
-        "decisions": plugin.engine.log.recent(100, query=query),
+        "decisions": plugin.engine.log.recent(100, query=query, category=category),
+        "category": category,
         "query": query, "retained": len(plugin.engine.log.ring), "limit": 100,
     })
 

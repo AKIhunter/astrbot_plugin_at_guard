@@ -13,6 +13,19 @@ FIELDS = (
     "enable", "only_llm_result", "interval_method", "interval", "log_base",
     "words_count_threshold", "split_mode", "regex", "split_words", "content_cleanup_rule",
 )
+VIRTUAL_FIELDS = {"second_period", "split_words_enabled", "max_segments"}
+MANAGED_RE = re.compile(r"^\(\?#at-guard-reply-v2;words=([01]);second=([01]);max=(\d+)\)")
+
+
+def managed_regex(words_enabled=False, second=False, maximum=0):
+    # 宿主对已经拆好的Plain逐段透传，仍由原生管线负责TTS、图片转换和发送。
+    return f"(?#at-guard-reply-v2;words={int(words_enabled)};second={int(second)};max={maximum})(?s).+"
+
+
+def managed_options(raw):
+    match = MANAGED_RE.match(str(raw.get("regex", ""))) if raw.get("split_mode") == "regex" else None
+    return ({"split_words_enabled": match[1] == "1", "second_period": match[2] == "1",
+             "max_segments": int(match[3])} if match else None)
 REMOVED_FIELDS = (
     "expression_persona_inject", "expression_quote_probability", "expression_quote_probability_max",
     "expression_quote_cooldown_seconds", "expression_quote_max_age_seconds",
@@ -47,6 +60,8 @@ def values(config):
         raw["split_mode"] == "regex"
         and raw["regex"] == second_period_regex(raw["split_words"])
     )
+    result.update(split_words_enabled=False, max_segments=0)
+    result.update(managed_options(raw) or {})
     return result
 
 
@@ -71,10 +86,10 @@ def revision(data):
 def validate(patch):
     if not isinstance(patch, dict) or not patch:
         raise NativeReplyError("没有要保存的分段字段")
-    if set(patch) - (set(FIELDS) | {"second_period"}):
+    if set(patch) - (set(FIELDS) | VIRTUAL_FIELDS):
         raise NativeReplyError("只能修改原生分段回复字段")
     for key, value in patch.items():
-        if key in {"enable", "only_llm_result", "second_period"}:
+        if key in {"enable", "only_llm_result", "second_period", "split_words_enabled"}:
             if not isinstance(value, bool):
                 raise NativeReplyError(f"{key}必须是开关")
         elif key in {"interval_method", "split_mode"}:
@@ -93,9 +108,11 @@ def validate(patch):
             if (isinstance(value, bool) or not isinstance(value, (int, float))
                     or not math.isfinite(value) or value <= 1):
                 raise NativeReplyError("对数底数必须为大于1的有限数字")
-        elif key == "words_count_threshold":
+        elif key in {"words_count_threshold", "max_segments"}:
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise NativeReplyError("不分段字数阈值必须是非负整数")
+            if key == "max_segments" and value > 20:
+                raise NativeReplyError("最多分段数应为0至20，0表示不限")
         elif key == "split_words":
             if (not isinstance(value, list) or not value
                     or any(not isinstance(s, str) or not s for s in value)):
@@ -201,8 +218,17 @@ class NativeReply:
             if disk != current["values"]:
                 raise NativeReplyError("原生运行与落盘分段设置不一致，请重新读取或检查AstrBot配置", 409)
             # 将第二句号开关编译成原生正则，宿主仍负责断句、TTS及最终发送。
-            second_period = patch.pop("second_period", current["values"]["second_period"])
-            if second_period and (
+            # 新页面的三个细化字段编码在同一份原生正则中，各配置独立保存。
+            managed = managed_options(config["platform_settings"]["segmented_reply"])
+            use_managed = (managed is not None or bool(
+                set(patch) & (VIRTUAL_FIELDS | {"only_llm_result", "enable", "split_words"})))
+            controls = {key: patch.pop(key, current["values"][key]) for key in VIRTUAL_FIELDS}
+            second_period = controls["second_period"]
+            if use_managed and not ("regex" in patch or patch.get("split_mode") == "words"):
+                patch["split_mode"] = "regex"
+                patch["regex"] = managed_regex(controls["split_words_enabled"], second_period,
+                                                controls["max_segments"])
+            elif second_period and (
                 body["values"].get("second_period") is True
                 or "split_words" in patch
             ):

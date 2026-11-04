@@ -335,7 +335,9 @@ def decision_identity(entry: dict[str, Any]) -> dict[str, str]:
     session = str(entry.get("session_id") or current.get("session_id") or gid)
     kind = str(entry.get("session_type") or current.get("session_type") or "")
     private = kind == "private" or bool(re.search(r":(?:FriendMessage|friend):", session, re.I))
+    category = "private" if private else "group" if current.get("explicit_call") is True else "public"
     return {
+        "category": str(entry.get("category") or category),
         "session_id": session,
         "session_type": "private" if private else "group",
         "group_id": "" if private else str(entry.get("group_id") or current.get("group_id") or gid),
@@ -414,9 +416,11 @@ class DecisionLog:
         except OSError:
             pass
 
-    def recent(self, limit: int = 60, query: str = "") -> list[dict[str, Any]]:
+    def recent(self, limit: int = 60, query: str = "", category: str = "") -> list[dict[str, Any]]:
         q = str(query or "").strip().casefold()[:120]
         items = reversed(self.ring)
+        if category:
+            items = (item for item in items if decision_identity(item)["category"] == category)
         if q:
             items = (item for item in items if q in
                      json.dumps({**item, **decision_identity(item)}, ensure_ascii=False).casefold())

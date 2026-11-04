@@ -17,6 +17,11 @@ ROOT = Path(os.environ.get(
 ))
 
 
+class PerceivedMessageStub(SimpleNamespace):
+    def __init__(self, **kwargs):
+        super().__init__(meta={}, **kwargs)
+
+
 def methods(relative, selected):
     """只去掉框架装饰器，执行源码中的方法体，避免启动插件后台任务。"""
     tree = ast.parse((ROOT / relative).read_text(encoding="utf-8-sig"))
@@ -29,7 +34,7 @@ def methods(relative, selected):
     namespace = {
         "time": time, "Any": object, "AstrMessageEvent": object,
         "logger": logging.getLogger("handoff-test"),
-        "Block": SimpleNamespace, "PerceivedMessage": lambda **kw: SimpleNamespace(meta={}, **kw),
+        "Block": SimpleNamespace, "PerceivedMessage": PerceivedMessageStub,
         "component_to_block": lambda comp: SimpleNamespace(kind="text", text=comp.text),
         "blocks_to_text": lambda blocks: "\n".join(block.text for block in blocks),
         "add_temp_part": lambda req, text, marker: req.parts.append((text, marker)),

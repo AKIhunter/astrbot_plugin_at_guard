@@ -18,7 +18,7 @@ from astrbot.api.message_components import At, Image, Plain, Record, Reply
 from astrbot.core.platform.message_type import MessageType
 from test_gate import gate_config, plugin
 from test_native_reply import NATIVE
-from guard_native_reply import second_period_regex
+from guard_native_reply import second_period_regex, managed_regex
 from test_reply_delivery import Chain, Event, recall
 
 SOURCE = Path(os.environ.get("ASTRBOT_NATIVE_SOURCE", "/nonexistent-astrbot-source"))
@@ -71,6 +71,17 @@ def stages(guard):
 
 @unittest.skipUnless((SOURCE / "core/pipeline/respond/stage.py").is_file(), "需提供实际宿主源码路径")
 class NativePipelineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_managed_tables_and_fenced_code_keep_required_line_breaks(self):
+        for text in ("|项目|值|\n|---|---|\n|状态|正常|", "~~~python\nprint('甲。乙。')\n~~~"):
+            for enable in (False, True):
+                with self.subTest(text=text, enable=enable):
+                    event, _, _ = await self.run_pipeline(
+                        text=text, native_quote=False, native_mention=False, quote=False, mention=False,
+                        segments={"enable": enable, "only_llm_result": False,
+                                  "regex": managed_regex(second=True, maximum=1), "split_mode": "regex"})
+                    self.assertEqual(["".join(c.text for c in chain.chain if isinstance(c, Plain))
+                                      for chain in event.sent], [text])
+
     async def test_second_period_runs_in_actual_host_and_resets_after_other_endings(self):
         for text, expected in (
             ("甲。乙。丙。丁。", ["甲。乙。", "丙。丁。"]),
@@ -118,13 +129,14 @@ class NativePipelineTests(unittest.IsolatedAsyncioTestCase):
         if streaming:
             event.result.result_content_type = "stream"
             async def chunks():
-                yield Chain([Plain("第一句。")])
-                yield Chain([Plain("第二句！")])
+                yield Chain([Plain(text[:len(text)//2])])
+                yield Chain([Plain(text[len(text)//2:])])
             event.result.async_stream = chunks()
         namespace = stages(guard)
         native = copy.deepcopy(NATIVE)
         native.update(enable=True, interval="0,0")
         native.update(segments or {})
+        guard.context.get_config = lambda *_: {"platform_settings": {"segmented_reply": native}}
         tts_provider = SimpleNamespace(get_audio=AsyncMock(return_value="/offline/audio.wav")) if tts else None
         ctx = SimpleNamespace(astrbot_config=dict(
             platform_settings=dict(reply_prefix="", reply_with_quote=native_quote,
@@ -190,14 +202,12 @@ class NativePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(event.sent[0].chain[-1], Image)
         self.assertFalse(any(isinstance(c, Plain) for r in event.sent for c in r.chain))
 
-    async def test_actual_native_loop_stops_after_first_on_recall_or_context_change(self):
+    async def test_actual_native_loop_ignores_late_recall_but_stops_on_context_change(self):
         for reason in ("recall", "context_changed"):
             event, _, _ = await self.run_pipeline(cancel=reason)
-            self.assertEqual(len(event.sent), 1)
-            self.assertEqual("".join(c.text.strip() for c in event.sent[0].chain
-                                    if isinstance(c, Plain)), "第一句。")
+            self.assertEqual(len(event.sent), 2 if reason == "recall" else 1)
             self.assertEqual(event.get_extra("_at_guard_delivery_blocked"),
-                             "message_recalled" if reason == "recall" else reason)
+                             None if reason == "recall" else reason)
 
     async def test_actual_native_stream_finish_does_not_replay_text(self):
         event, guard, _ = await self.run_pipeline(streaming=True)
@@ -205,3 +215,34 @@ class NativePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("".join(c.text for c in event.sent[0].chain if isinstance(c, Plain)),
                          "第一句。第二句！")
         self.assertEqual(guard._delivery().typing_pause.await_count, 1)
+
+    async def test_managed_model_paragraphs_split_with_stream_and_normal_results(self):
+        for streaming in (False, True):
+            event, _, _ = await self.run_pipeline(text="甲。乙。\n\n丙。丁。",
+                streaming=streaming, native_quote=False, native_mention=False, quote=False,
+                mention=False, segments={"regex": managed_regex(), "only_llm_result": True})
+            self.assertEqual(["".join(c.text for c in r.chain if isinstance(c, Plain))
+                              for r in event.sent], ["甲。乙。", "丙。丁。"])
+
+    async def test_managed_refinements_are_independent_and_maximum_keeps_all_text(self):
+        for words, second, maximum, expected in (
+            (False, False, 0, ["甲。乙！丙。丁。戊！"]),
+            (False, True, 0, ["甲。乙！丙。", "丁。戊！"]),
+            (True, False, 0, ["甲。", "乙！", "丙。", "丁。", "戊！"]),
+            (True, True, 0, ["甲。乙！", "丙。丁。", "戊！"]),
+            (True, False, 2, ["甲。 乙！ 丙。", "丁。 戊！"]),
+        ):
+            event, _, _ = await self.run_pipeline(text="甲。乙！丙。丁。戊！",
+                native_quote=False, native_mention=False, quote=False, mention=False,
+                segments={"regex": managed_regex(words, second, maximum)})
+            self.assertEqual(["".join(c.text for c in r.chain if isinstance(c, Plain))
+                              for r in event.sent], expected)
+
+    async def test_managed_disable_preserves_model_paragraph_switch(self):
+        for only, expected in ((False, "甲。 乙。"), (True, "甲。\n\n乙。")):
+            for streaming in (False, True):
+                event, _, _ = await self.run_pipeline(text="甲。\n\n乙。", streaming=streaming,
+                    native_quote=False, native_mention=False, quote=False, mention=False,
+                    segments={"enable": False, "regex": managed_regex(), "only_llm_result": only})
+                self.assertEqual(len(event.sent), 1)
+                self.assertEqual("".join(c.text for c in event.sent[0].chain if isinstance(c, Plain)), expected)

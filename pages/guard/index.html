@@ -399,6 +399,12 @@
     <input id="decisionSearch" type="search" maxlength="120" aria-label="搜索群ID、私聊QQ、原话或上下文" placeholder="群ID / 私聊QQ / 原话…" autocomplete="off" />
   </div>
   <p class="sub" id="decisionSearchStatus" role="status">默认展示最近100条；搜索覆盖已恢复的最近600条记录。</p>
+  <div class="actions" id="decisionCategories" role="group" aria-label="判定分类">
+    <button class="btn" data-category="" aria-pressed="true">全部</button>
+    <button class="btn" data-category="private" aria-pressed="false">私聊</button>
+    <button class="btn" data-category="group" aria-pressed="false">群聊 · 明确呼叫</button>
+    <button class="btn" data-category="public" aria-pressed="false">公开发言 · 自主参与</button>
+  </div>
   <p class="sub">看分数、静默原因及实际判定模型；点「详情」查看当时的上下文。发送前取消会单独记录。</p>
   <div class="scroll" tabindex="0" role="region" aria-label="最近判定记录，可横向滚动">
     <table>
@@ -498,13 +504,13 @@
       <p class="sub">与AstrBot「扩展功能 → 分段回复」共用配置，修改后点击页面底部保存。</p>
       <label id="nativeProfileLabel" class="row" hidden>原生配置 <select id="nativeProfile" aria-label="原生配置"></select></label>
       <div id="nativeSegmentFields"></div>
-      <p class="sub">第二句号开启：每段跳过第一个“。”，第二个“。”断开；其他分段词照常断开。</p>
+      <p class="sub">模型自行分段控制段落；启用分段回复后，每段单独发送。第二句号和分段词分别开启后才细化断句，默认关闭。最多分几段为0时不限，超出会合并正文。</p>
       <div class="segment-example" aria-label="第二句号断句示例"><span>甲。乙。</span><span>丙！</span><span>丁。戊。</span></div>
       <details><summary>原生高级参数</summary><div id="nativeSegmentAdvanced"></div></details>
       <div class="actions"><p class="msg" id="nativeStatus" role="status">读取中…</p><button class="btn" id="nativeReload">重新读取</button></div>
     </section>
     <section class="card" id="recall">
-      <h2>撤回保护</h2><p class="sub">不增加处理前等待。群聊和私聊都开启即全局保护。</p>
+      <h2>撤回保护</h2><p class="sub">只在「碎片消息等待」窗口内保护，续发会重置整批截止时间。窗口内撤回任一原消息，本批不回复；等待为0或私聊不等待时没有保护窗口。</p>
       <div id="recallFields"></div>
     </section>
     <section class="card" id="understanding">
@@ -564,15 +570,20 @@
   let bridge = null;
   const resolveBridge = () => (window.AstrBotPluginView || window.AstrBotPluginPage || null);
   const el = (id) => document.getElementById(id);
-  const state = { data: null, mode: "enforce", draft: {}, dirty: new Set(), q: "", searchRows: null, saving: false };
+  const state = { data: null, mode: "enforce", draft: {}, dirty: new Set(), q: "", category: "", searchRows: null, saving: false };
   let nativeData = null, nativeDraft = {}, nativeSaving = false, nativeLoading = false;
+  const nativeProfileKey = "at-guard-native-profile";
+  let preferredNativeProfile = "default";
+  try { preferredNativeProfile = localStorage.getItem(nativeProfileKey) || "default"; } catch (_) {}
   const NATIVE_FIELDS = [
+    ["only_llm_result", "仅对模型结果分段（模型自行分段）", "bool"],
     ["enable", "启用分段回复", "bool"],
     ["second_period", "第二句号", "bool"],
+    ["split_words_enabled", "启用分段词", "bool"],
     ["split_words", "分段词（每行一个）", "words"],
+    ["max_segments", "最多分几段（0不限）", "number"],
     ["split_mode", "分段方式", [["regex", "正则断句"], ["words", "分段词"]], true],
     ["regex", "断句正则", "text", true],
-    ["only_llm_result", "仅对模型结果分段", "bool", true],
     ["words_count_threshold", "超过此字数不拆分", "number", true],
     ["content_cleanup_rule", "原生分段文本清理正则", "text", true],
   ];
@@ -585,6 +596,8 @@
       const value = Object.hasOwn(nativeDraft, key) ? nativeDraft[key] : nativeData.values[key];
       const mode = nativeDraft.split_mode ?? nativeData.values.split_mode;
       const second = nativeDraft.second_period ?? nativeData.values.second_period;
+      const managed = String(nativeDraft.regex ?? nativeData.values.regex).includes("at-guard-reply-v2");
+      if (managed && (key === "regex" || key === "split_mode")) return;
       if ((key === "regex" && (mode !== "regex" || second)) || (key === "split_mode" && second)) return;
       const row = document.createElement("div"); row.className = "row";
       const label = document.createElement("label"); label.textContent = title; label.htmlFor = "native-" + key;
@@ -597,7 +610,11 @@
       if (kind === "bool") input.checked = value;
       else input.value = kind === "words" ? value.join("\n") : value;
       if (kind === "number") { input.min = key === "log_base" ? "1.01" : "0"; input.step = key === "log_base" ? "0.1" : "1"; }
-      input.disabled = nativeSaving || nativeLoading || state.saving;
+      if (key === "max_segments") input.max = "20";
+      const splitting = nativeDraft.enable ?? nativeData.values.enable;
+      input.disabled = nativeSaving || nativeLoading || state.saving ||
+        (["second_period","split_words_enabled","max_segments"].includes(key) && !splitting) ||
+        (key === "split_words" && !(nativeDraft.split_words_enabled ?? nativeData.values.split_words_enabled));
       input.addEventListener(kind === "bool" || Array.isArray(kind) ? "change" : "input", () => {
         const next = kind === "bool" ? input.checked : kind === "number" ? Number(input.value)
           : kind === "words" ? input.value.split("\n").filter(s => s !== "") : input.value;
@@ -608,7 +625,7 @@
         el("nativeStatus").className = "msg";
         el("nativeProfile").disabled = Object.keys(nativeDraft).length > 0;
         showSaveBar();
-        if (key === "split_mode" || key === "second_period") renderNative();
+        if (["split_mode","second_period","split_words_enabled","enable"].includes(key)) renderNative();
       });
       const cell = document.createElement("div");
       cell.className = kind === "bool" ? "native-toggle switch" : "field-control";
@@ -624,14 +641,21 @@
     el("nativeProfileLabel").hidden = nativeData.profiles.length <= 1;
     if (focusId?.startsWith("native-") && !el(focusId)?.disabled) el(focusId)?.focus({preventScroll:true});
   }
-  async function loadNative(configId = nativeData?.config_id || "default") {
+  async function loadNative(configId = nativeData?.config_id || preferredNativeProfile) {
     if (nativeSaving || nativeLoading || state.saving) return;
     nativeLoading = true;
     renderNative();
     try {
       // 页面桥禁止端点携带?，查询参数必须独立传递。
-      const data = await apiGet("console/native-segments", { config_id: configId });
+      let data;
+      try { data = await apiGet("console/native-segments", { config_id: configId }); }
+      catch (err) {
+        if (!nativeData && configId !== "default") data = await apiGet("console/native-segments", {config_id:"default"});
+        else throw err;
+      }
       nativeData = data;
+      preferredNativeProfile = data.config_id;
+      try { localStorage.setItem(nativeProfileKey, data.config_id); } catch (_) {}
       Object.keys(nativeDraft).forEach(key => {
         if (JSON.stringify(nativeDraft[key]) === JSON.stringify(data.values[key])) delete nativeDraft[key];
       });
@@ -659,7 +683,10 @@
         config_id: nativeData.config_id, expected_revision: nativeData.revision, values: nativeDraft
       });
       nativeDraft = {};
-      el("nativeStatus").textContent = "已保存并同步AstrBot原生分段回复";
+      preferredNativeProfile = nativeData.config_id;
+      try { localStorage.setItem(nativeProfileKey, nativeData.config_id); } catch (_) {}
+      el("nativeStatus").textContent = "已保存并同步原生配置 · " +
+        (nativeData.profiles.find(p => p.id === nativeData.config_id)?.name || nativeData.config_id);
       el("nativeStatus").className = "msg ok";
     } catch (err) {
       el("nativeStatus").textContent = "保存失败：" + err.message;
@@ -1434,13 +1461,18 @@
     const identity=sessionIdentity(row);
     return (identity.privateChat ? "私聊 " : "群 ") + (identity.id || "—");
   }
+  function decisionCategory(row) {
+    if (row.category) return row.category;
+    if (sessionIdentity(row).privateChat) return "private";
+    return chatData(row)?.current_message?.explicit_call === true ? "group" : "public";
+  }
   async function searchDecisions() {
     const query=state.q.trim();
     const sequence=++searchSequence;
-    if (!query) return;
+    if (!query && !state.category) return;
     el("decisionSearchStatus").textContent="正在搜索群ID、私聊QQ及判定内容…";
     try {
-      const data=await apiGet("console/decisions",{query});
+      const data=await apiGet("console/decisions",{query, category: state.category});
       if (sequence!==searchSequence) return;
       state.searchRows=data.decisions || [];
       renderDecisions();
@@ -1454,14 +1486,15 @@
   function renderDecisions() {
     const all = state.searchRows ?? state.data.decisions ?? [];
     const q = (state.q || "").trim().toLowerCase();
+    const scoped = state.category ? all.filter(d => decisionCategory(d) === state.category) : all;
     const rows = q
-      ? all.filter((d) => {
+      ? scoped.filter((d) => {
           const raw = d.raw == null ? "" : String(d.raw);
           const ctx = d.ctx == null ? "" : String(d.ctx);
           return [raw,ctx,readingNote(d),d.mdl,d.gid,JSON.stringify(sessionIdentity(d)),JSON.stringify(d.chat_data || {}),
             JSON.stringify(d.image_summaries || [])].join(" ").toLowerCase().includes(q);
         })
-      : all;
+      : scoped;
     const body = el("decisions");
     if (!rows.length) {
       body.innerHTML = '<tr><td colspan="9" class="empty">' + (q ? "无匹配结果" : "暂无记录") + "</td></tr>";
@@ -1827,7 +1860,7 @@
     renderStats();
     renderDistribution();
     renderDecisions();
-    if (state.q.trim()) searchDecisions();
+    if (state.q.trim() || state.category) searchDecisions();
   }
 
   async function load(full) {
@@ -1852,7 +1885,7 @@
       renderStats();
       renderDistribution();
       renderDecisions();
-      if (state.q.trim()) searchDecisions();
+      if (state.q.trim() || state.category) searchDecisions();
     } catch (err) {
       el("dirtyMsg").textContent = "读取失败：" + err.message;
       el("dirtyMsg").className = "msg err";
@@ -1964,6 +1997,18 @@
   el("nativeProfile").addEventListener("change", () => {
     loadNative(el("nativeProfile").value);
   });
+  el("decisionCategories").addEventListener("click", ev => {
+    const button = ev.target.closest("[data-category]");
+    if (!button) return;
+    state.category = button.dataset.category;
+    state.searchRows = null;
+    searchSequence++;
+    el("decisionCategories").querySelectorAll("button").forEach(item =>
+      item.setAttribute("aria-pressed", String(item === button)));
+    renderDecisions();
+    if (state.category || state.q.trim()) searchDecisions();
+    else el("decisionSearchStatus").textContent = "默认展示最近100条；搜索覆盖已恢复的最近600条记录。";
+  });
   document.querySelectorAll(".page-tabs button").forEach((btn, index, buttons)=>{
     btn.addEventListener("click", ()=>selectPage(btn.dataset.page));
     btn.addEventListener("keydown", ev=>{
@@ -2039,7 +2084,7 @@
       searchSequence++;
       renderDecisions();
       clearTimeout(searchTimer);
-      if (state.q.trim()) searchTimer=setTimeout(searchDecisions,250);
+      if (state.q.trim() || state.category) searchTimer=setTimeout(searchDecisions,250);
       else el("decisionSearchStatus").textContent="默认展示最近100条；搜索覆盖已恢复的最近600条记录。";
     });
     await load(true);

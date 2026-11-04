@@ -21,6 +21,7 @@ RECALLED_KEY = "_at_guard_source_recalled"
 class RecallRecord:
     created: float
     recalled: asyncio.Event
+    batch: object = None
 
     def __getitem__(self, key):
         return getattr(self, key)
@@ -93,7 +94,10 @@ class ReplyDelivery:
             return True
         key = self.key(event, raw.get("message_id"))
         if key:
-            self._record(key)["recalled"].set()
+            row = self.active_records.get(key)
+            # 只认监听后且安静期截止前的撤回，不让生成/打字延迟延长保护。
+            if row and row.batch is not None and row.batch.clock() < row.batch.deadline:
+                row["recalled"].set()
         # 撤回通知不是一条新用户消息，不交给人格/记忆/主模型。
         event.stop_event()
         return True
@@ -163,11 +167,15 @@ class ReplyDelivery:
             return not self.recalled(event)
         recall = self.recall_enabled(event)
         style = self.owns_expression()
-        if not recall and not style:
+        segments = getattr(self, "segments", None)
+        segmenting = bool(segments and segments.active(event))
+        if not recall and not style and not segmenting:
             return True
         event.set_extra("_at_guard_delivery_prepared", True)
         if recall and (key := self.key(event)):
-            event.set_extra("_at_guard_recall_record", self._record(key))
+            row = self._record(key)
+            row.batch = getattr(event.get_extra("_at_guard_fragment_ticket"), "batch", None)
+            event.set_extra("_at_guard_recall_record", row)
         event.set_extra("_at_guard_expression_received", time.monotonic())
         # 直接event.send只复核撤回；主模型最终输出才执行表达计划。
         if self.patch(event) and style:
@@ -339,7 +347,10 @@ class ReplyDelivery:
                             plan = event.get_extra("_at_guard_delivery_plan")
                         if plan:
                             full._at_guard_delivery_token = plan["token"]
-                    await wrapped(full)
+                    segments = getattr(self, "segments", None)
+                    packets = segments.stream_packets(event, full) if segments else [full]
+                    for packet in packets:
+                        await wrapped(packet)
                 finally:
                     self.tasks.discard(task)
             event.send_streaming = buffered_stream

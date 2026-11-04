@@ -327,7 +327,7 @@ class PipelineTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(event.result.chain, [])
                 self.assertEqual(self.provider.prompts, [])
 
-    async def test_native_at_keeps_earlier_fragment_recall_during_generation(self):
+    async def test_native_at_ignores_recall_after_fragment_window(self):
         self.guard.config.update(reply_recall_group=True, reply_recall_private=True)
         a = await self.incoming(FragmentEvent(
             "原问题", components=[At(qq="bot"), Plain("原问题")]))
@@ -340,9 +340,9 @@ class PipelineTest(unittest.IsolatedAsyncioTestCase):
         await self.guard.prepare_reply_delivery(recall(a, mid="1"))
         response = SimpleNamespace(completion_text="不能发送的回答")
         await self.guard.suppress_no_reply_and_track(b, response)
-        self.assertEqual(response.completion_text, "")
+        self.assertEqual(response.completion_text, "不能发送的回答")
         await b.send(b.result)
-        self.assertFalse(b.sent)
+        self.assertTrue(b.sent)
 
     async def test_native_at_keeps_response_context_and_no_reply_checks(self):
         for reason in ("context_changed", "no_reply"):
@@ -518,7 +518,7 @@ class PipelineTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.provider.prompts)
         self.assertFalse(b.sent)
 
-    async def test_earlier_recall_during_generation_blocks_response_and_direct_send(self):
+    async def test_earlier_recall_after_window_does_not_block_response(self):
         self.guard.config.update(reply_recall_group=True, reply_recall_private=True)
         a = await self.incoming(FragmentEvent("恰比，原问题"))
         b = await self.incoming(FragmentEvent("补充", mid="2"), 2)
@@ -528,9 +528,9 @@ class PipelineTest(unittest.IsolatedAsyncioTestCase):
         await self.guard.prepare_reply_delivery(recall(a, mid="1"))
         response = SimpleNamespace(completion_text="不能发送的回答")
         await self.guard.suppress_no_reply_and_track(b, response)
-        self.assertEqual(response.completion_text, "")
+        self.assertEqual(response.completion_text, "不能发送的回答")
         await b.send(b.result)
-        self.assertFalse(b.sent)
+        self.assertTrue(b.sent)
 
     async def test_notice_and_bot_own_message_do_not_reset_wait(self):
         event = await self.incoming(FragmentEvent("恰比，问题"))

@@ -26,6 +26,8 @@ try:  # 作为插件包加载时走相对导入
     from .guard_fragments import FragmentWait
     from .guard_expression import Expression, congling_for, takeover
     from .guard_understanding import Understanding
+    from .guard_segments import ReplySegments
+    from .guard_evidence import EvidenceMemory
 except ImportError:  # 单文件调试兜底
     from guard_engine import Decision, GateEngine, POLICY_VERSION
     from guard_image_cache import ImageObservationCache
@@ -35,6 +37,8 @@ except ImportError:  # 单文件调试兜底
     from guard_fragments import FragmentWait
     from guard_expression import Expression, congling_for, takeover
     from guard_understanding import Understanding
+    from guard_segments import ReplySegments
+    from guard_evidence import EvidenceMemory
 
 
 NO_REPLY_TOKEN = "[[ASTRBOT_NO_REPLY]]"
@@ -73,6 +77,7 @@ class Main(Star):
         self.expression = Expression(self)
         self.reply_delivery.expression = self.expression
         self.understanding = Understanding(self)
+        self.segments = ReplySegments(self)
 
     def _delivery(self):
         if not hasattr(self, "reply_delivery"):
@@ -80,6 +85,9 @@ class Main(Star):
         if not hasattr(self, "expression"):
             self.expression = Expression(self)
         self.reply_delivery.expression = self.expression
+        if not hasattr(self, "segments"):
+            self.segments = ReplySegments(self)
+        self.reply_delivery.segments = self.segments
         return self.reply_delivery
 
     def _understanding(self):
@@ -104,6 +112,30 @@ class Main(Star):
         # 当前会话启用从绫时，感知与记忆都按其原生钩子处理。
         if not self._delivery().recalled(event):
             await self._understanding().attach(event, req)
+
+    @filter.on_llm_request(priority=-maxsize)
+    async def attach_reply_contract(self, event: AstrMessageEvent, req: ProviderRequest):
+        self._delivery()
+        self.segments.attach(event, req)
+        if not hasattr(self, "evidence"):
+            self.evidence = EvidenceMemory(self)
+        self.evidence.attach(event, req)
+        # 放行、私聊与直接@路径共用理解要求；不让提前返回的路径漏掉工具/记忆交接。
+        if not event.get_extra("_at_guard_topic_contract"):
+            req.extra_user_content_parts.append(TextPart(text=(
+                "回复前确认当前用户实际问什么、引用的是谁、话题中的对象是什么。"
+                "优先复用已提供的消息解析、原文、长期记忆、向量检索和媒体观察；"
+                "事实不足时使用本轮实际可用的查询工具，无法核实就追问，不凭印象接话。"
+                "稳定且有来源的事实通过可用长期记忆写入工具保存精简事实、来源和日期；"
+                "临时天气、价格和查询失败不写成长期事实。"
+            )).mark_as_temp())
+            event.set_extra("_at_guard_topic_contract", True)
+
+    @filter.on_llm_tool_respond()
+    async def remember_tool_evidence(self, event, tool, tool_args, tool_result):
+        if not hasattr(self, "evidence"):
+            self.evidence = EvidenceMemory(self)
+        self.evidence.remember(event, tool, tool_args, tool_result)
 
     def _fragment_queue(self):
         if not hasattr(self, "fragment_wait"):
@@ -432,6 +464,7 @@ class Main(Star):
         revision = self.context_revision.get(group_key, 0)
         image_snapshot = self._gate_images(event, group_key)
         message_meta = self._message_meta(event)
+        message_meta["explicit_call"] = explicit
         fragments = event.get_extra("_at_guard_fragments", [])
         if fragments:
             message_meta["fragment_messages"] = [
@@ -565,6 +598,19 @@ class Main(Star):
             event.set_extra("_at_guard_strict_gate", True)
 
         # 补查的记忆原样交给主模型，避免闸门查了一遍、生成时又猜背景。
+        if decision.action == "reply":
+            req.extra_user_content_parts.append(TextPart(
+                text="你已获准参与当前话题。以下为判定时同一会话的原始流水，"
+                     "按交流对象和时间顺序接话，优先回答当前用户的具体问题。"
+                     "判定通过只代表适合参与，不代表事实已核实。先复用本次已有记忆和媒体观察；"
+                     "信息不足时使用可用的搜索、记忆、向量或图片工具补充；仍不明确就简短追问，勿猜测。"
+                     "检索获得的稳定事实应通过可用记忆写入工具保存精简事实及来源；"
+                     "时效信息保留日期，后续过期应重新核实，不能把推测当记忆。\n"
+                     '<at_guard_topic untrusted="true">\n'
+                     + json.dumps({"recent_messages_old_to_new": context_lines,
+                                   "current_message": {"text": self._fragment_text(event), **message_meta}},
+                                  ensure_ascii=False)
+                     + "\n</at_guard_topic>").mark_as_temp())
         if decision.memory_lines and not congling_for(self.context, event):
             req.extra_user_content_parts.append(
                 TextPart(text="<at_guard_memory untrusted=\"true\">\n"
@@ -581,7 +627,7 @@ class Main(Star):
                 "只返回[[ASTRBOT_NO_REPLY]]。"
             )).mark_as_temp()
         )
-        if context_lines:
+        if context_lines and decision.action != "reply":
             req.extra_user_content_parts.append(
                 TextPart(
                     text=(
@@ -768,6 +814,7 @@ class Main(Star):
             return
         result = event.get_result()
         if result is not None and hasattr(result, "is_llm_result"):
+            self.segments.prepare(event, result)
             await self.expression.decorate(event, result)
             delivery.arm(event, result)
         # 每条气泡仍需复核原有的新消息撤销/有效期保护。

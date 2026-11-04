@@ -65,6 +65,12 @@ class DeliveryTest(unittest.IsolatedAsyncioTestCase):
         self.guard = plugin(gate_config(gate_mode="off", reply_quote_enabled=False,
                                        reply_mention_enabled=False))
         self.delivery, self.event = self.guard._delivery(), Event()
+        self.window(self.event)
+
+    @staticmethod
+    def window(event):
+        event.set_extra("_at_guard_fragment_ticket", SimpleNamespace(
+            batch=SimpleNamespace(deadline=time.monotonic() + 60, clock=time.monotonic)))
     async def arm(self, **config):
         self.guard.config.update(expression_takeover_enabled=True, **config)
         await self.guard.prepare_reply_delivery(self.event)
@@ -149,6 +155,7 @@ class DeliveryTest(unittest.IsolatedAsyncioTestCase):
             self.guard.config.update(reply_recall_group=group_on, reply_recall_private=private_on)
             for group, expected in (("1001", group_on), ("", private_on)):
                 event = Event(group=group, mid=f"{group_on}{private_on}{group}")
+                self.window(event)
                 await self.delivery.prepare(event)
                 self.delivery.notice(recall(event, mid=event.message_obj.message_id))
                 self.assertEqual(self.delivery.recalled(event), expected)
@@ -163,7 +170,9 @@ class DeliveryTest(unittest.IsolatedAsyncioTestCase):
         self.guard.config["reply_recall_group"] = True
         self.delivery.notice(recall(self.event))
         await self.delivery.prepare(self.event)
-        self.assertTrue(self.event.stopped)
+        self.assertFalse(self.event.stopped)  # 未监听到原消息前的通知不能取消新事件。
+        self.delivery.notice(recall(self.event))
+        self.assertTrue(self.delivery.recalled(self.event))
         other = Event(group="2002")
         await self.delivery.prepare(other)
         self.assertFalse(self.delivery.recalled(other))
@@ -198,6 +207,7 @@ class DeliveryTest(unittest.IsolatedAsyncioTestCase):
         self.event.result.chain = [Plain("字" * 25)]
         await self.arm(reply_recall_group=True, reply_typing_enabled=True)
         earlier = Event(mid="old")
+        self.window(earlier)
         await self.delivery.prepare(earlier)
         self.event.set_extra("_at_guard_fragment_sources", (earlier,))
         task = asyncio.create_task(self.event.send(self.event.result))
@@ -281,6 +291,22 @@ class DeliveryTest(unittest.IsolatedAsyncioTestCase):
         await self.event.send(self.event.result)
         await self.guard.track_sent_message(self.event)
         self.assertFalse(self.guard.last_bot_line)
+
+    async def test_expired_or_disabled_fragment_window_does_not_cancel(self):
+        for batch in (None, SimpleNamespace(deadline=time.monotonic() - 1, clock=time.monotonic)):
+            event = Event(mid=str(id(batch)))
+            event.set_extra("_at_guard_fragment_ticket", SimpleNamespace(batch=batch))
+            self.guard.config["reply_recall_group"] = True
+            await self.delivery.prepare(event)
+            self.delivery.notice(recall(event, mid=event.message_obj.message_id))
+            self.assertFalse(self.delivery.recalled(event))
+
+    async def test_recall_inside_window_remains_canceled_after_window_closes(self):
+        self.guard.config["reply_recall_group"] = True
+        await self.delivery.prepare(self.event)
+        self.delivery.notice(recall(self.event))
+        self.event.get_extra("_at_guard_fragment_ticket").batch.deadline = 0
+        self.assertTrue(self.delivery.recalled(self.event))
 
 
 class SettingsTest(unittest.TestCase):

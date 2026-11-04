@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from astrbot.api.message_components import At, Image, Plain, Reply
-from guard_native_reply import NativeReply, NativeReplyError, migrate, validate, second_period_regex
+from guard_native_reply import NativeReply, NativeReplyError, migrate, validate, second_period_regex, managed_options
 from test_gate import gate_config, plugin
 from test_reply_delivery import Chain, Event
 
@@ -72,20 +72,36 @@ class NativeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(saved), {"config_id", "values", "revision", "profiles"})
         self.assertNotIn("unrelated", str(saved))
 
-    async def test_second_period_is_native_regex_and_words_changes_recompile(self):
+    async def test_new_controls_roundtrip_independently_in_selected_profile(self):
+        self.other.config_path = str(Path(self.folder.name) / "other.json")
+        self.other.save_config()
+        body = {"config_id": "other", "expected_revision": self.bridge.read("other")["revision"],
+                "values": {"enable": True, "only_llm_result": True,
+                           "split_words_enabled": False, "second_period": False, "max_segments": 3}}
+        saved = await self.bridge.save(self.request, body)
+        self.assertEqual(saved["config_id"], "other")
+        self.assertEqual(saved["values"]["max_segments"], 3)
+        self.assertFalse(saved["values"]["second_period"])
+        self.assertFalse(saved["values"]["split_words_enabled"])
+        self.assertEqual(self.conf["platform_settings"]["segmented_reply"], NATIVE)
+        self.assertNotIn("max_segments", self.other["platform_settings"]["segmented_reply"])
+
+    async def test_second_period_only_save_enters_managed_mode_and_words_stay_independent(self):
         saved = await self.bridge.save(self.request, self.body(second_period=True))
         self.assertTrue(saved["values"]["second_period"])
         raw = self.conf["platform_settings"]["segmented_reply"]
         self.assertNotIn("second_period", raw)
         self.assertEqual(raw["split_mode"], "regex")
-        self.assertEqual(re.findall(raw["regex"], "甲。乙。丙！丁。戊。"), ["甲。乙。", "丙！", "丁。戊。"])
+        self.assertEqual(managed_options(raw), dict(
+            second_period=True, split_words_enabled=False, max_segments=0))
+        self.assertEqual(re.findall(raw["regex"], "甲。乙。丙！丁。戊。"), ["甲。乙。丙！丁。戊。"])
         saved = await self.bridge.save(self.request, self.body(split_words=["。", "END"]))
         self.assertTrue(saved["values"]["second_period"])
-        self.assertEqual(re.findall(saved["values"]["regex"], "甲。乙END丙。丁。"),
-                         ["甲。乙END", "丙。丁。"])
+        self.assertFalse(saved["values"]["split_words_enabled"])
+        self.assertEqual(saved["values"]["split_words"], ["。", "END"])
         saved = await self.bridge.save(self.request, self.body(second_period=False))
         self.assertFalse(saved["values"]["second_period"])
-        self.assertEqual(re.findall(saved["values"]["regex"], "甲。乙。"), ["甲。", "乙。"])
+        self.assertEqual(re.findall(saved["values"]["regex"], "甲。乙。"), ["甲。乙。"])
         self.assertNotIn("second-period", saved["values"]["regex"])
 
     async def test_native_editor_changes_second_period_state_and_conflicts(self):

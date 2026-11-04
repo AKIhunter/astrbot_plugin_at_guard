@@ -57,6 +57,18 @@ class RecordsTest(unittest.TestCase):
         self.assertEqual(group["group_id"], "1001")
         self.assertEqual(group["private_qq"], "")
 
+    def test_category_filters_full_ring_before_page_limit_and_can_combine_search(self):
+        log = DecisionLog(None)
+        log.add({"gid": "qq:FriendMessage:998877", "raw": "关键旧私聊"})
+        log.add({"gid": "1001", "raw": "关键呼叫",
+                 "chat_data": {"current_message": {"explicit_call": True}}})
+        for index in range(150):
+            log.add({"gid": "1001", "raw": "公开话题", "ts": index})
+        self.assertEqual(len(log.recent(100, category="private")), 1)
+        self.assertEqual(len(log.recent(100, "关键", category="group")), 1)
+        self.assertEqual(len(log.recent(100, category="public")), 100)
+        self.assertEqual(log.recent(100, "不存在", category="private"), [])
+
     def test_new_private_identity_is_written(self):
         engine = GateEngine(gate_config(), None, SimpleNamespace(debug=lambda *_: None))
         d = Decision(chat_data={"current_message": {"session_type": "private",

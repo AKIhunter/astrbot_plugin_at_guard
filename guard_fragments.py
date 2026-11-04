@@ -20,6 +20,7 @@ class Batch:
     key: tuple[str, str]
     deadline: float
     quiet_seconds: float
+    clock: object = time.monotonic
     explicit: bool = False
     items: list[Ticket] = field(default_factory=list)
     latest: Ticket | None = None
@@ -69,7 +70,7 @@ class FragmentWait:
             if len(self.batches) >= self.CAPACITY:
                 ticket.reason = "fragment_capacity"
                 return ticket
-            batch = Batch(key, now + seconds, seconds)
+            batch = Batch(key, now + seconds, seconds, clock=self.clock)
             self.batches[key] = batch
         ticket.batch = batch
         batch.latest = ticket
