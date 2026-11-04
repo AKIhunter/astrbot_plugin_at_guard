@@ -671,7 +671,7 @@
       let options = [];
       if (["provider","providers","vision"].includes(kind)) {
         options = (data.providers || []).filter(p => kind !== "vision" || p.supports_images)
-          .map(p => [p.id, p.id + (p.model ? " · " + p.model : "")]);
+          .map(p => [p.id, (p.display || p.id) + (p.model && p.model !== p.display ? " · " + p.model : "")]);
         if (kind !== "providers") options.unshift(["", kind === "vision" ? "不使用独立转述模型" : "使用宿主默认模型"]);
       } else if (kind === "persona") options = [["[%None]", "不使用人格"], ...(data.personas || []).map(p=>[p.id,p.name])];
       else options = kind === "strategy" ? [["remote","远程渲染"],["local","本地渲染"]] : [["openai","OpenAI兼容"],["novelai","NovelAI"]];
@@ -1364,7 +1364,7 @@
             ? (p.kind === "router" ? " · 路由 " + n + " 个上游" : " · " + n + " 个可选模型")
             : "";
           opt.value = p.id;
-          opt.textContent = p.id + tail + extra;
+          opt.textContent = (p.display || p.id) + tail + extra;
         }
         select.appendChild(opt);
       });

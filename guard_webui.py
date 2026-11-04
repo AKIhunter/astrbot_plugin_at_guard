@@ -156,6 +156,20 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
             provider_id = str(config.get("id", "") or "")
             if not provider_id:
                 continue
+            provider_type = str(config.get("type", "") or "")
+            display_name = str(
+                config.get("display_name")
+                or config.get("label")
+                or config.get("name")
+                or ""
+            ).strip()
+            try:
+                pinned_slot = int(config.get("upstream_slot") or 0)
+            except (TypeError, ValueError):
+                pinned_slot = 0
+            parent_provider_id = str(
+                config.get("parent_provider_id") or ""
+            ).strip()
             model = ""
             try:
                 model = str(provider.get_model() or "")
@@ -168,7 +182,7 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
             upstream_pairs: list[tuple[str, str]] = []
             raw_upstreams = getattr(provider, "upstreams", None)
             if isinstance(raw_upstreams, (list, tuple)) and raw_upstreams:
-                kind = "router"
+                kind = "router_upstream" if pinned_slot else "router"
                 for item in raw_upstreams:
                     label = str(getattr(item, "name", "") or "").strip()
                     upstream_model = ""
@@ -184,7 +198,9 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
                         names.append(f"{label} → {upstream_model}")
                     elif label or upstream_model:
                         names.append(label or upstream_model)
-                    if upstream_model:
+                    # multi_api_router 已注册真实的指定上游 Provider，不再生成
+                    # provider::model 虚拟项，避免选择器出现重复和内部前缀。
+                    if upstream_model and provider_type != "multi_api_router":
                         upstream_pairs.append((label, upstream_model))
 
             if not names:
@@ -214,10 +230,13 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
                     "id": provider_id,
                     "model": model,
                     "kind": kind,
+                    "display": display_name,
                     "upstreams": names,
                     "instances": 1,
                     "supports_images": vision_supported,
                 }
+                if kind == "router_upstream" and parent_provider_id:
+                    items[provider_id]["parent"] = parent_provider_id
             else:
                 entry["instances"] += 1
                 entry["supports_images"] = entry.get("supports_images", False) or vision_supported
