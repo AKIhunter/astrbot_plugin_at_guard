@@ -103,6 +103,11 @@
   .field-help-trigger:active { transform: translateY(1px); }
   .field-control { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .field-control > input, .field-control > select, .field-control > textarea { min-width: 0; flex: 1; }
+  /* 保留线上自定义生图尺寸的紧凑布局。 */
+  .field-control:has(> .size-custom) { flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .size-custom { flex: 1 1 100%; gap: 6px; min-width: 0; }
+  .size-custom input { box-sizing: border-box; width: 76px; min-width: 0; flex: 0 1 auto; }
+  .size-custom span { color: var(--muted); flex: 0 0 auto; }
   .field-control:has(textarea) { grid-column: 1 / -1; }
   .row .val { min-width: 32px; font-variant-numeric: tabular-nums; font-weight: 650; color: var(--accent); }
   .row .val:empty { display: none; }
@@ -146,6 +151,7 @@
   .flow-node[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
   .flow-node[data-status="passed"] { border-color: var(--ok); background: var(--ok-soft); }
   .flow-node[data-status="blocked"], .flow-node[data-status="error"] { border-color: var(--bad); background: var(--bad-soft); }
+  .flow-node[data-status="observed"] { border-color: var(--warn); background: var(--warn-soft); }
   .flow-node[data-status="planned"] { border-style: dashed; }
   .flow-detail { position: sticky; top: 16px; min-width: 0; border-left: 2px solid var(--accent); padding-left: 16px; }
   .flow-detail h3 { margin: 0 0 6px; font-size: 14px; }
@@ -210,8 +216,11 @@
   .pill.reply { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
   .pill.silence { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
   .empty { color: var(--muted); font-size: 12px; padding: 12px 0; }
-  .probe { display: grid; gap: 8px; }
+  .probe { display: grid; gap: 8px; min-width: 0; }
+  .probe > * { min-width: 0; }
   .probe-out { margin-top: 4px; border: 1px dashed var(--line); border-radius: 8px; padding: 10px 12px; display: none; }
+  /* 模型原话可能是连续 JSON，窄屏下必须在结果框内断行。 */
+  .probe-out .msg { overflow-wrap: anywhere; word-break: break-word; }
   .probe-out.show { display: block; }
   .scroll { max-height: 340px; overflow: auto; }
   .hintline { font-size: 11.5px; color: var(--muted); padding-top: 4px; }
@@ -223,11 +232,41 @@
     color: var(--accent); cursor: pointer; font-size: 11px; padding: 1px 7px; font-family: inherit;
   }
   .raw-cell .raw-open:hover { border-color: var(--accent); }
-  .decision-note { min-width: 240px; max-width: 350px; white-space: normal; }
-  .decision-note p { margin: 0 0 3px; }
-  .decision-note small { display: block; color: var(--muted); font-size: 11px; }
-  .decision-note .raw-open { margin-top: 6px; color: var(--accent); border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
-  .decision-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 16px; padding: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+  #records .scroll { max-height: none; overflow-x: auto; }
+  #records table { table-layout: fixed; min-width: 1040px; }
+  #records th:nth-child(1), #records td:nth-child(1) { width: 128px; }
+  #records th:nth-child(2), #records td:nth-child(2) { width: 240px; }
+  #records th:nth-child(3), #records td:nth-child(3) { width: 250px; }
+  #records th:nth-child(4), #records td:nth-child(4) { width: 96px; }
+  #records th:nth-child(5), #records td:nth-child(5) { width: 112px; }
+  #records th:nth-child(6), #records td:nth-child(6) { width: 82px; }
+  #records th:nth-child(7), #records td:nth-child(7) { width: 92px; text-align: right; }
+  .decision-conversation {
+    display: block; overflow: hidden; text-overflow: ellipsis;
+    font: 11px/1.35 ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+    user-select: text;
+  }
+  .decision-request { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .decision-request .id-value {
+    min-width: 0; overflow-wrap: anywhere; white-space: normal;
+    font: 11px/1.35 ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+  }
+  .decision-request button {
+    flex: none; padding: 1px 5px; border: 1px solid var(--line); background: transparent;
+    color: var(--muted); border-radius: 3px; cursor: pointer; font-size: 10px;
+  }
+  .decision-action {
+    color: var(--accent); border: 1px solid var(--line); background: transparent;
+    border-radius: 6px; padding: 4px 8px; cursor: pointer; font: inherit; font-size: 11px;
+  }
+  .decision-action:hover { border-color: var(--accent); }
+  .decision-text-result { color: var(--text); white-space: normal; line-height: 1.45; }
+  .decision-score, .decision-duration { font-variant-numeric: tabular-nums; }
+  .decision-score { font-weight: 600; }
+  .decision-score.pass { color: var(--ok); }
+  .decision-score.fail { color: var(--bad); }
+  .decision-score.missing { color: var(--muted); font-weight: 500; }
+  .decision-summary { padding: 11px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
   .decision-summary p { margin: 0; }
   .decision-summary b { font-weight: 600; }
   .chat-messages, .attempt-list { padding-left: 24px; margin: 8px 0 16px; }
@@ -240,6 +279,27 @@
   .record-disclosure { margin: 12px 0 0; border-top: 1px solid var(--line); padding-top: 10px; }
   .record-disclosure summary { cursor: pointer; color: var(--muted); }
   .record-disclosure pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: var(--bg); padding: 10px; }
+  .request-flow { list-style: none; margin: 8px 0 4px; padding: 0; }
+  .request-flow li {
+    position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr);
+    gap: 10px; padding: 0 0 12px;
+  }
+  .request-flow li:not(:last-child)::after {
+    content: ""; position: absolute; left: 12px; top: 26px; bottom: 0;
+    width: 1px; background: var(--line);
+  }
+  .flow-number {
+    position: relative; z-index: 1; display: grid; place-items: center;
+    width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 50%;
+    background: var(--panel); color: var(--accent); font-size: 11px; font-weight: 650;
+  }
+  .flow-main { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+  .flow-main b { font-size: 12.5px; }
+  .flow-status { color: var(--muted); font-size: 11.5px; }
+  .request-flow-note { margin-top: 2px; color: var(--muted); font-size: 11.5px; }
+  .trace-details { margin-top: 8px; border-top: 1px solid var(--line-soft); padding-top: 8px; }
+  .trace-details > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  .trace-details[open] > summary { color: var(--text); }
   .modal-mask {
     position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000;
     display: none; align-items: center; justify-content: center; padding: 24px;
@@ -247,14 +307,15 @@
   .modal-mask.show { display: flex; }
   .modal {
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    width: min(720px, 100%); max-height: 80vh; display: flex; flex-direction: column;
+    width: min(720px, 100%); min-width: 0; max-width: 100%; max-height: 80vh;
+    display: flex; flex-direction: column;
     box-shadow: 0 12px 40px rgba(0,0,0,.3);
   }
   .modal .modal-head {
     display: flex; align-items: center; gap: 10px; padding: 12px 16px;
     border-bottom: 1px solid var(--line-soft);
   }
-  .modal .modal-head h3 { margin: 0; font-size: 13px; font-weight: 600; }
+  .modal .modal-head h3 { min-width: 0; margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
   .modal .modal-head .spacer { flex: 1; }
   .modal .modal-close {
     border: 1px solid var(--line); border-radius: 6px; background: transparent;
@@ -335,6 +396,13 @@
   .timing-cell { padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; }
   .timing-cell b { display: block; }
   .timing-cell small { color: var(--muted); }
+  .trace-id { display: flex; align-items: start; gap: 5px; font-size: 11px; margin: 4px 0; min-width: 0; }
+  .trace-id .id-value { min-width: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; user-select: text; }
+  .trace-id button { flex: none; padding: 1px 5px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 3px; cursor: pointer; font-size: 10px; }
+  @media (pointer: coarse) {
+    .decision-action, .decision-request button { min-height: 44px; }
+  }
+  .trace-list { margin: 6px 0; padding-left: 20px; font-size: 12px; overflow-wrap: anywhere; }
   .save-bar button {
     padding: 7px 16px; border-radius: 8px; cursor: pointer;
     font-family: inherit; font-size: 12.5px; border: 1px solid var(--line);
@@ -365,6 +433,10 @@
     .modal-mask { padding: 12px; }
     .save-bar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
     .save-bar .save-bar-text { flex-basis: 100%; }
+  }
+  @media (max-width: 480px) {
+    .timing-grid { grid-template-columns: 1fr; }
+    .modal .modal-head, .modal .modal-body { padding-left: 12px; padding-right: 12px; }
   }
   @media (max-width: 380px) {
     .row { grid-template-columns: 1fr; }
@@ -417,22 +489,22 @@
 <section class="card" id="records">
   <div class="card-head-row">
     <h2>最近判定</h2>
-    <input id="decisionSearch" type="search" maxlength="120" aria-label="搜索群ID、私聊QQ、原话或上下文" placeholder="群ID / 私聊QQ / 原话…" autocomplete="off" />
+    <input id="decisionSearch" type="search" maxlength="120" aria-label="搜索对话ID、session_id、request_id或原话" placeholder="对话ID / request_id / 原话…" autocomplete="off" />
   </div>
-  <p class="sub" id="decisionSearchStatus" role="status">默认展示最近100条；搜索覆盖已恢复的最近600条记录。</p>
+  <p class="sub" id="decisionSearchStatus" role="status">默认展示最近10条；搜索覆盖已恢复的最近600条记录。</p>
   <div class="actions" id="decisionCategories" role="group" aria-label="判定分类">
     <button class="btn" data-category="" aria-pressed="true">全部</button>
     <button class="btn" data-category="private" aria-pressed="false">私聊</button>
     <button class="btn" data-category="group" aria-pressed="false">群聊 · 明确呼叫</button>
     <button class="btn" data-category="public" aria-pressed="false">公开发言 · 自主参与</button>
   </div>
-  <p class="sub">看分数、静默原因及实际判定模型；点「详情」查看当时的上下文。发送前取消会单独记录。</p>
+  <p class="sub">总耗时只统计参与判断链路，不包含正文生成、工具执行和最终发送；点「查看详情」按顺序核对完整流程。</p>
   <div class="scroll" tabindex="0" role="region" aria-label="最近判定记录，可横向滚动">
     <table>
       <thead>
-        <tr><th>序号</th><th>时间</th><th>会话</th><th>分数</th><th>阈值</th><th>决定</th><th>原因 / 模型</th><th>耗时</th><th>判断说明</th></tr>
+        <tr><th>对话ID</th><th>request_id</th><th>文字判断结果</th><th>总耗时</th><th>参与适合度</th><th>判断结果</th><th>查看详情</th></tr>
       </thead>
-      <tbody id="decisions"><tr><td colspan="9" class="empty">暂无记录</td></tr></tbody>
+      <tbody id="decisions"><tr><td colspan="7" class="empty">暂无记录</td></tr></tbody>
     </table>
   </div>
 </section>
@@ -487,10 +559,11 @@
   <button class="btn" id="flowReload">刷新流程</button>
 </div>
 <p class="msg" id="flowStatus" role="status">读取中…</p>
+<div class="flow-note" id="flowModeSummary" aria-live="polite"></div>
 <section class="card">
-  <h2>判定逻辑</h2>
-  <p class="sub">本地规则 → 文字判断 → 按需补足证据 → 语义否决 → 阈值。互聊、停口和未理解优先静默。</p>
-  <div class="flow-legend"><span>绿色：已通过</span><span>红色：否决 / 异常</span><span>灰色：未执行 / 未记录</span><span>虚线：生成计划</span></div>
+  <h2 id="gateFlowTitle">判定逻辑</h2>
+  <p class="sub" id="gateFlowSub">本地规则 → 文字判断 → 按需补足证据 → 语义否决 → 阈值。</p>
+  <div class="flow-legend"><span>绿色：已通过</span><span>红色：否决 / 异常</span><span>黄色：仅记录、不拦截</span><span>灰色：未执行 / 未记录</span><span>虚线：生成计划</span></div>
   <div class="flow-layout"><div class="flow-canvas" id="gateGraph" aria-label="判定流程节点"></div><aside class="flow-detail" id="gateDetail" aria-live="polite">点击节点查看依据。</aside></div>
 </section>
 <section class="card" id="probeCard">
@@ -544,14 +617,15 @@
   <div class="reply-stack">
     <section class="card" id="nativeSegments">
       <h2>原生配置</h2>
-      <p class="sub">人格、主模型和分段与AstrBot共用，保存后生效。独立生图按需提供给主模型。</p>
+      <p class="sub">人格、主模型、语音回复和分段与AstrBot共用，保存后生效。独立生图按需提供给主模型。</p>
       <label id="nativeProfileLabel" class="row" hidden>原生配置 <select id="nativeProfile" aria-label="原生配置"></select></label>
-      <div id="nativePersonaField"></div>
-      <p class="sub" id="nativePersonaStatus" role="status"></p>
-      <details class="native-group"><summary>编辑范围 <button class="field-help-trigger" id="profileScopeHelp" aria-label="编辑范围说明">?</button></summary>
-        <label class="row">AstrBot配置范围 <select id="nativeScope" aria-label="AstrBot配置范围"></select></label>
-        <p class="sub">会话使用哪个配置由AstrBot分配。这里的人格、模型与分段只保存到所选范围。</p>
-      </details>
+      <div class="native-group" id="nativePersonaConfig">
+        <h3>AstrBot配置人格 <button class="field-help-trigger" id="profileScopeHelp" aria-label="配置人格说明">?</button></h3>
+        <label class="row">AstrBot配置 <select id="nativeScope" aria-label="AstrBot配置人格"></select></label>
+        <div id="nativePersonaField"></div>
+        <p class="sub" id="nativePersonaStatus" role="status"></p>
+        <p class="sub">选择的配置会记住；人格、模型与分段只保存到此配置。会话配置仍由AstrBot分配。</p>
+      </div>
       <div id="nativeSettingsFields"></div>
       <details class="native-group"><summary>AI生图（文生图 / 图生图） <button class="field-help-trigger" id="imageGroupHelp" aria-label="AI生图说明">?</button></summary>
         <p class="sub" id="imageSettingsStatus" role="status">读取中…</p><div id="imageSettingsFields"></div>
@@ -684,7 +758,7 @@
       // 每个回退项使用与主模型相同的原生下拉，顺序就是回退顺序。
       const cell = document.createElement("div"); cell.className="field-control fallback-list";
       let selected = Array.isArray(value) ? [...value] : [];
-      const candidates = (data.providers || []).map(p=>[p.id,
+      const candidates = (data.providers || []).filter(p=>p.role==="chat").map(p=>[p.id,
         (p.display || p.id) + (p.model && p.model !== p.display ? " · "+p.model : "")]);
       const disabled = nativeSaving || nativeLoading || state.saving;
       const commit = () => changed(selected.filter(Boolean));
@@ -724,36 +798,76 @@
       };
       paint();row.append(title,cell);return row;
     }
-    const select = ["provider","vision","persona","strategy","protocol","size"].includes(kind);
+    const select = ["provider","vision","tts","persona","strategy","protocol","size"].includes(kind);
     const input = document.createElement(select ? "select" : kind === "text" ? "textarea" : "input");
     input.id = prefix + key;
     if (select) {
       let options = [];
-      if (["provider","providers","vision"].includes(kind)) {
-        options = (data.providers || []).filter(p => kind !== "vision" || p.supports_images)
+      if (["provider","providers","vision","tts"].includes(kind)) {
+        options = (data.providers || []).filter(p =>
+          kind === "tts" ? p.role === "tts"
+          : prefix === "image-" ? true
+          : p.role === "chat" && (kind !== "vision" || p.supports_images))
           .map(p => [p.id, (p.display || p.id) + (p.model && p.model !== p.display ? " · " + p.model : "")]);
         options.unshift(["", prefix === "image-" ? "请选择生图模型（启用前必选）"
-          : kind === "vision" ? "选择图片理解模型" : "使用宿主默认模型"]);
+          : kind === "vision" ? "选择图片理解模型"
+          : kind === "tts" ? "未配置默认 TTS 模型（可由会话单独选择）"
+          : "使用宿主默认模型"]);
       } else if (kind === "persona") options = [["[%None]", "不使用人格"], ...(data.personas || []).map(p=>[p.id,p.name])];
       else options = kind === "strategy" ? [["remote","远程渲染"],["local","本地渲染"]]
         : kind === "protocol" ? [["images","标准图片接口（生成 / 编辑）"],["chat_images","对话生图接口（image模态）"]]
-        : [["auto","服务自动选择"],["1024x1024","1024 × 1024"],["1536x1024","1536 × 1024"],["1024x1536","1024 × 1536"]];
+        : [["auto","服务自动选择"],["1024x1024","1024 × 1024"],["1536x1024","1536 × 1024"],["1024x1536","1024 × 1536"],["custom","自定义大小"]];
       const selected = Array.isArray(value) ? value : [value];
-      selected.forEach(v => { if (!options.some(o=>o[0] === v)) options.push([v, v + "（当前不可用，请手动更换）"]); });
+      const customSize = kind === "size" && typeof value === "string" && /^\d{3,4}x\d{3,4}$/.test(value)
+        && !["auto","1024x1024","1536x1024","1024x1536"].includes(value);
+      if (kind === "size" && customSize) selected.splice(0, selected.length, "custom");
+      else selected.forEach(v => { if (!options.some(o=>o[0] === v)) options.push([v, v + "（当前不可用，请手动更换）"]); });
       options.forEach(([v,t]) => input.add(new Option(t,v,false,selected.includes(v))));
     } else if (kind === "bool") { input.type="checkbox"; input.checked=!!value; }
     else { input.type = ["int","float"].includes(kind) ? "number" : "text"; input.value = value ?? ""; }
     if (["int","float"].includes(kind)) input.step = kind === "float" ? "0.1" : "1";
     if (key==="daily_limit") {input.min="0";input.max="1000";}
-    if (key==="timeout_seconds") {input.min="10";input.max="180";}
+    if (key==="timeout_seconds") {input.min="10";input.max="500";}
     input.disabled = nativeSaving || nativeLoading || state.saving;
+    const cell = document.createElement("div"); cell.className = kind === "bool" ? "native-toggle" : "field-control";
+    cell.append(input);
+    if (kind === "size") {
+      const box = document.createElement("div"); box.className = "field-control size-custom";
+      const dims = (typeof value === "string" ? value.match(/^(\d{3,4})x(\d{3,4})$/) : null);
+      const mk = which => {
+        const n = document.createElement("input"); n.type = "number"; n.min = "512"; n.max = "2048";
+        n.step = "1"; n.dataset.dim = which === "w" ? "w" : "h";
+        n.value = dims ? dims[which === "w" ? 1 : 2] : "1024";
+        n.setAttribute("aria-label", which === "w" ? "自定义宽度（像素）" : "自定义高度（像素）");
+        n.placeholder = which === "w" ? "宽" : "高"; n.disabled = input.disabled;
+        n.addEventListener("input", () => {
+          const w = box.querySelector("[data-dim=w]").value;
+          const h = box.querySelector("[data-dim=h]").value;
+          if (/^\d{3,4}$/.test(w) && /^\d{3,4}$/.test(h)) changed(w + "x" + h);
+        });
+        return n;
+      };
+      const w = mk("w"), h = mk("h"), x = document.createElement("span"); x.textContent = "×";
+      box.append(w, x, h); cell.append(box);
+      const sync = () => {
+        const isCustom = input.value === "custom";
+        box.style.display = isCustom ? "" : "none";
+        box.querySelectorAll("input").forEach(n => n.disabled = input.disabled || !isCustom);
+      };
+      input.addEventListener("change", () => {
+        sync();
+        if (input.value === "custom") {
+          if (/^\d{3,4}$/.test(w.value) && /^\d{3,4}$/.test(h.value)) changed(w.value + "x" + h.value);
+        } else if (input.value) changed(input.value);
+      });
+      sync();
+    }
     input.addEventListener(select || kind === "bool" ? "change" : "input", () => {
       const next = kind === "bool" ? input.checked
         : ["int","float"].includes(kind) ? Number(input.value) : input.value;
-      changed(next);
+      if (kind !== "size") changed(next);
     });
-    const cell = document.createElement("div"); cell.className = kind === "bool" ? "native-toggle" : "field-control";
-    cell.append(input); row.append(title,cell); return row;
+    row.append(title,cell); return row;
   }
   function renderNativeSettings() {
     if (settingsData) {
@@ -780,10 +894,12 @@
       const groups = [...new Set(settingsData.fields.filter(f=>f.key!=="persona_id").map(f=>f.group))];
       groups.forEach(group => {
         const details=document.createElement("details"); details.className="native-group"; details.dataset.group=group;
-        details.open = initial ? group === "模型" || group === "人格" : opened.has(group);
+        details.open = initial ? ["模型","人格","语音回复"].includes(group) : opened.has(group);
         const summary=document.createElement("summary"); summary.textContent=group;
         summary.append(" ",helpButton(group, group === "人格"
           ? "选择后保存才固定；会话旧人格与从绫不会自动换掉。各原生配置分别保存。"
+          : group === "语音回复"
+          ? "开关与默认TTS模型同步所选AstrBot原生配置。实际语音还要求会话允许且触发概率通过；概率、双输出和文件服务仍在AstrBot设置。"
           : "这些参数同步修改所选AstrBot原生配置，标题右侧问号可查看具体用途。"));
         details.append(summary);
         if (group === "人格") {
@@ -820,7 +936,8 @@
         el("imageSettingsFields").append(settingsControl(f,imageData,imageDraft,"image-")));
     }
   }
-  const FLOW_STATUS = {passed:"已通过",blocked:"已否决",error:"异常",skipped:"未执行",planned:"生成计划",unrecorded:"未记录"};
+  const FLOW_STATUS = {passed:"已通过",blocked:"已否决",error:"异常",observed:"仅记录",
+    skipped:"未执行",planned:"生成计划",unrecorded:"未记录"};
   function drawFlow(name, graph) {
     const canvas=el(name+"Graph"), detail=el(name+"Detail");
     const selected=canvas.querySelector('[aria-pressed="true"]')?.dataset.node || graph.nodes[0].id;
@@ -888,7 +1005,20 @@
     });
   }
   function renderFlow(data) {
-    flowData=data; drawFlow("gate",data.gate); drawFlow("generate",data.generate);
+    flowData=data;
+    const mode=data.mode || {id:"enforce",title:"硬闸门",summary:"判断结论控制生成",
+      decision_effect:"判断结论直接控制是否进入主回复生成。",probe_note:"试跑不发送消息。"};
+    const summary=el("flowModeSummary");summary.replaceChildren();
+    [["当前模式",mode.title],["线上执行",mode.summary],
+      ["判断记录",mode.decision_effect],["试跑说明",mode.probe_note]].forEach(([label,value])=>{
+        const span=document.createElement("span");const b=document.createElement("b");
+        b.textContent=label+"：";span.append(b,document.createTextNode(value));summary.append(span);
+      });
+    el("gateFlowTitle").textContent=mode.id==="shadow"?"旁路判断记录":"硬闸门判定";
+    el("gateFlowSub").textContent=mode.id==="shadow"
+      ? "本地参与规则 → 文字判断 → 按需补足证据 → 记录结论；线上始终继续主回复。"
+      : "本地参与规则 → 文字判断 → 按需补足证据 → 语义否决 → 阈值；静默时停止生成。";
+    drawFlow("gate",data.gate); drawFlow("generate",data.generate);
     el("flowStatus").textContent=data.note;
   }
   async function loadFlow() {
@@ -953,20 +1083,24 @@
     if (focusId?.startsWith("native-") && !el(focusId)?.disabled) el(focusId)?.focus({preventScroll:true});
     renderNativeSettings();
   }
-  async function loadNative(configId = nativeData?.config_id || preferredNativeProfile) {
+  async function loadNative(configId = null) {
     if (nativeSaving || nativeLoading || state.saving) return;
     nativeLoading = true;
     renderNative();
     try {
       // 页面桥禁止端点携带?，查询参数必须独立传递。
-      let data;
-      try { data = await apiGet("console/native-segments", { config_id: configId }); }
-      catch (err) {
-        if (!nativeData && configId !== "default") data = await apiGet("console/native-segments", {config_id:"default"});
-        else throw err;
+      if (!configId) {
+        if (nativeData) configId = nativeData.config_id;
+        else {
+          const remembered = await apiGet("console/native-profile");
+          configId = remembered.saved ? remembered.config_id : preferredNativeProfile;
+        }
       }
+      const data = await apiGet("console/native-segments", { config_id: configId });
       const settings = await apiGet("console/native-settings", {config_id:data.config_id});
       const images = await apiGet("console/image-settings");
+      // 服务端记录避免插件iframe的localStorage受限或刷新后切换存储上下文。
+      await apiPost("console/native-profile", {config_id:data.config_id});
       nativeData = data; settingsData = settings; imageData = images;
       preferredNativeProfile = data.config_id;
       try { localStorage.setItem(nativeProfileKey, data.config_id); } catch (_) {}
@@ -978,9 +1112,10 @@
       });
       renderNative();
       showSaveBar();
-      el("nativeStatus").textContent = Object.keys(nativeDraft).length
-        ? "已重新读取原生设置，保留你的分段草稿；保存将更新这些字段。"
-        : "已读取AstrBot原生配置 · " + (data.values.enable ? "分段开启" : "分段关闭");
+      el("nativeStatus").textContent = nativeDirty()
+        ? "已重新读取原生设置，保留你的原生配置草稿；保存将更新这些字段。"
+        : "已读取AstrBot原生配置 · " + (data.values.enable ? "分段开启" : "分段关闭")
+          + " · " + (settings.values.tts_enabled ? "语音回复开启" : "语音回复关闭");
       el("nativeStatus").className = "msg";
       await loadFlow();
     } catch (err) {
@@ -1094,6 +1229,10 @@
     no_value: "没有具体贡献",
     context_changed: "群聊已更新，取消旧回复",
     message_expired: "回复机会已过期",
+    mentions_other: "仅@其他用户",
+    duplicate: "近期重复消息",
+    cooldown: "主动回复冷却",
+    inflight: "同群参与处理中",
     no_reply: "主模型选择静默",
     too_short: "太短",
     no_content: "无有效文字",
@@ -1110,12 +1249,13 @@
     deadline: "整条判定超时",
     fallback_same_model: "兜底模型与失败模型相同",
     image_cache_busy: "同会话图片判断正在进行",
+    at_call: "明确呼叫 @ 机器人，直接回复",
+    wake: "称呼唤醒，直接回复",
+    private_off: "私聊关闭判定，交给主模型回复",
   };
   const MODE_HINT = {
-    enforce: "硬闸门：静默时不生成回复；视觉异常可使用主模型做一次判定",
-    shadow: "观察模式：只记录不拦截，用来校准阈值",
-    legacy: "旧行为：先生成再丢弃，仅回滚时用",
-    off: "关闭参与判断；表达、模拟耗时和撤回保护分别控制",
+    enforce: "完整判断；静默立即停止，放行才生成",
+    shadow: "完整判断并记录；无论结论都继续回复",
   };
 
   const GATE_FIELDS = [
@@ -1242,10 +1382,10 @@
     apply_to_private: "开启：私聊同样经过参与评分；碎片等待是否开启仍由独立私聊开关决定。",
   };
   const MODE_CONFIG_HELP = {
-    desc: "控制参与判断是否拦截消息。日常使用硬闸门；观察模式用于校准；关闭判断不会自动关闭回复方式、模拟耗时或撤回保护。",
+    desc: "控制参与判断是否拦截消息。硬闸门按结论决定是否生成；观察模式同步完成判断并记录，但不执行参与拦截，仍有判定等待和API用量。",
     examples: [
       "日常运行选硬闸门：判定静默时不生成回复，可以直接节省主模型调用。",
-      "更换判定模型后先用观察模式看分数分布，确认阈值后再切回硬闸门。",
+      "更换判定模型后可用观察模式看分数和原因：判断为静默也会继续主回复，但撤回、私聊范围和平台失败仍独立生效。",
     ],
   };
   function helpExamples(key, help) {
@@ -1268,8 +1408,8 @@
 
   function themeModeBadge(mode) {
     const badge = el("modeBadge");
-    badge.textContent = { enforce: "硬闸门", shadow: "观察中", legacy: "旧行为", off: "已解耦" }[mode] || mode;
-    badge.className = "badge " + (mode === "enforce" ? "on" : mode === "shadow" ? "warn" : "off");
+    badge.textContent = { enforce: "硬闸门", shadow: "观察中" }[mode] || mode;
+    badge.className = "badge " + (mode === "enforce" ? "on" : "warn");
   }
 
   function setDirty(key, value) {
@@ -1303,13 +1443,13 @@
   function renderModes() {
     const host = el("modes");
     host.innerHTML = "";
-    ["enforce", "shadow", "legacy", "off"].forEach((mode) => {
+    ["enforce", "shadow"].forEach((mode) => {
       const btn = document.createElement("button");
       btn.className = "mode" + (state.mode === mode ? " active" : "");
       btn.type = "button";
       btn.dataset.mode = mode;
       btn.setAttribute("aria-pressed", state.mode === mode ? "true" : "false");
-      btn.innerHTML = "<b>" + esc(({enforce:"硬闸门",shadow:"观察模式",legacy:"旧行为",off:"关闭判断"})[mode]) + "</b><span>" + esc(MODE_HINT[mode]) + "</span>";
+      btn.innerHTML = "<b>" + esc(({enforce:"硬闸门",shadow:"观察模式"})[mode]) + "</b><span>" + esc(MODE_HINT[mode]) + "</span>";
       btn.addEventListener("click", () => {
         state.mode = mode;
         setDirty("gate_mode", mode);
@@ -1751,16 +1891,76 @@
   function readingNote(row) {
     const d=decisionData(row);
     if(row.src==="delivery") return REASON_LABEL[row.reason] || "发送前取消了旧回复";
+    if(row.src==="bypass") return "直接回复 · " + (REASON_LABEL[row.reason] || row.reason);
     if(row.src==="rule") return "规则过滤：" + (REASON_LABEL[row.reason] || row.reason);
     if(row.src==="error") return "未完成有效判定：" + (REASON_LABEL[row.reason] || row.reason);
     const act=d.act==="reply" ? "模型建议参与" : d.act==="silent" ? "模型建议静默" : "未记录模型动作";
     return act + " · " + understanding(d.understood);
   }
 
+  function textDecisionSummary(row) {
+    const attempts=Array.isArray(row.attempts)?row.attempts.filter(a=>a.stage==="text"):[];
+    if(!attempts.length) {
+      if(["rule","bypass","delivery"].includes(row.src)) {
+        return "未调用 · "+(REASON_LABEL[row.reason]||row.reason||"规则直接处理");
+      }
+      const legacy=decisionData(row);
+      if(legacy.act==="reply" || legacy.act==="silent") {
+        return (({context_missing:"背景不足"})[legacy.model_reason]||
+          REASON_LABEL[legacy.model_reason]||legacy.model_reason||"原因未采集")+" · 次数未采集";
+      }
+      return "未调用 · "+(REASON_LABEL[row.reason]||row.reason||"原记录未采集");
+    }
+    const last=attempts.at(-1);
+    const reason=({context_missing:"背景不足"})[last.reason]||
+      REASON_LABEL[last.reason]||last.reason||"原因未采集";
+    const status=STATUS_LABEL[last.status]||last.status||"状态未采集";
+    const summary=last.status==="ok" ? reason :
+      [status,last.reason ? reason : ""].filter(Boolean).join(" · ");
+    const count=attempts.length>1
+      ? attempts.length+"次"+(row.memory_grounded?"（含记忆复判）":"")
+      : "";
+    return [summary,count].filter(Boolean).join(" · ");
+  }
+
+  function decisionDuration(row) {
+    const value=Number(row.ms);
+    if(!Number.isFinite(value) || value<0) return {text:"—",title:"未采集判断链路耗时"};
+    return {
+      text:value>=1000?(value/1000).toFixed(2)+"秒":Math.round(value)+"ms",
+      title:value+"ms（仅参与判断链路）",
+    };
+  }
+
+  function decisionScore(row) {
+    const finite=value=>value!==null && value!==undefined && value!=="" &&
+      Number.isFinite(Number(value));
+    const hasScore=finite(row.score);
+    const hasThreshold=finite(row.th);
+    const score=hasScore?Number(row.score):null;
+    const threshold=hasThreshold?Number(row.th):null;
+    const text=(hasScore?score:"—")+" / "+(hasThreshold?threshold:"—");
+    if(!hasScore || !hasThreshold) {
+      return {text,state:"missing",title:"旧记录未完整采集参与分或本次判定阈值"};
+    }
+    const passed=score>=threshold;
+    return {
+      text,
+      state:passed?"pass":"fail",
+      title:passed?"参与分达到本次历史阈值":"参与分低于本次历史阈值",
+    };
+  }
+
   function contextNote(row) {
     const chat=chatData(row);
     if(chat?.not_sent) return "未调用模型 · 当前候选消息 1 条";
-    return chat ? "参考流水 " + (chat.recent_messages_old_to_new || []).length + " 条＋当前消息 1 条" :
+    const references=chat?.reference_messages_old_to_new;
+    const fallback=Array.isArray(references)
+      ? references.filter(item=>!item?.is_omission).length
+      : (chat?.recent_messages_old_to_new || []).length;
+    const count=Number.isFinite(Number(chat?.reference_count))
+      ? Number(chat.reference_count) : fallback;
+    return chat ? "参考流水 " + count + " 条＋当前消息 1 条" :
       (row.ctx ? "旧记录未分条保存，详情保留原文" : "没有调用上下文记录");
   }
 
@@ -1769,16 +1969,36 @@
     const session = String(row.session_id || current.session_id || row.gid || "");
     const privateChat = (row.session_type || current.session_type)==="private" ||
       /:(FriendMessage|friend):/i.test(session);
+    const numeric=value=>/^\d+$/.test(String(value||""))?String(value):"";
+    const sessionMatch=session.match(
+      privateChat ? /:(?:FriendMessage|friend):(\d+)$/i : /:(?:GroupMessage|group):(\d+)$/i);
+    const privateId=numeric(row.private_qq)||numeric(current.private_qq)||
+      numeric(current.sender_id)||(sessionMatch?.[1]||"");
+    const groupId=numeric(row.group_id)||numeric(current.group_id)||
+      (sessionMatch?.[1]||"")||numeric(row.gid);
     return {
       session,
+      complete: Boolean(row.session_id || current.session_id ||
+        /.+:(GroupMessage|group|FriendMessage|friend):.+/i.test(String(row.gid || ""))),
       privateChat,
-      id: privateChat ? String(row.private_qq || current.private_qq || current.sender_id || session.split(":").at(-1)) :
-        String(row.group_id || current.group_id || row.gid || ""),
+      id: privateChat ? privateId : groupId,
     };
   }
-  function sessionLabel(row) {
-    const identity=sessionIdentity(row);
-    return (identity.privateChat ? "私聊 " : "群 ") + (identity.id || "—");
+  function idLine(label, value, missing) {
+    return '<div class="trace-id"><span class="id-value">'+esc(label+': '+(value || missing))+'</span>'+
+      (value ? '<button type="button" data-copy-id="'+esc(value)+'" aria-label="复制'+label+'">复制</button>' : '')+'</div>';
+  }
+  function bindIdCopy(root) {
+    root.querySelectorAll("[data-copy-id]").forEach(button=>button.addEventListener("click",async()=>{
+      try {
+        await navigator.clipboard.writeText(button.dataset.copyId);
+        button.textContent="已复制";
+      } catch (_) {
+        const range=document.createRange();range.selectNodeContents(button.previousElementSibling);
+        const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);
+        button.textContent="请手动复制";
+      }
+    }));
   }
   function decisionCategory(row) {
     if (row.category) return row.category;
@@ -1789,7 +2009,7 @@
     const query=state.q.trim();
     const sequence=++searchSequence;
     if (!query && !state.category) return;
-    el("decisionSearchStatus").textContent="正在搜索群ID、私聊QQ及判定内容…";
+    el("decisionSearchStatus").textContent="正在搜索request_id、会话及判定内容…";
     try {
       const data=await apiGet("console/decisions",{query, category: state.category});
       if (sequence!==searchSequence) return;
@@ -1810,57 +2030,220 @@
       ? scoped.filter((d) => {
           const raw = d.raw == null ? "" : String(d.raw);
           const ctx = d.ctx == null ? "" : String(d.ctx);
-          return [raw,ctx,readingNote(d),d.mdl,d.gid,JSON.stringify(sessionIdentity(d)),JSON.stringify(d.chat_data || {}),
+          return [raw,ctx,readingNote(d),d.mdl,d.gid,d.request_id,d.message_id,JSON.stringify(sessionIdentity(d)),JSON.stringify(d.chat_data || {}),
             JSON.stringify(d.image_summaries || [])].join(" ").toLowerCase().includes(q);
         })
       : scoped;
     const body = el("decisions");
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="9" class="empty">' + (q ? "无匹配结果" : "暂无记录") + "</td></tr>";
+      body.innerHTML = '<tr><td colspan="7" class="empty">' + (q ? "无匹配结果" : "暂无记录") + "</td></tr>";
       return;
     }
     body.innerHTML = rows.map((d) => {
       const cls = d.action === "reply" ? "reply" : "silence";
       const text = d.action === "reply" ? "放行" : "静默";
       const index=all.indexOf(d);
-      const chat=chatData(d);
-      const current=chat?.current_message?.text || (chat ? "[图片或空文字消息]" : "");
-      const rawCell='<div class="decision-note"><p>' + esc(readingNote(d)) + '</p><small>' +
-        esc(contextNote(d)) + '</small>' + (current ? '<small>当前：' + esc(current.slice(0,100)) + '</small>' : "") +
-        '<button class="raw-open" type="button" data-decision="' + index + '">查看判断详情</button></div>';
-      return "<tr>" +
-        "<td>" + (index+1) + "</td>" +
-        "<td>" + esc(fmtTime(d.ts)) + "</td>" +
-        "<td>" + esc(sessionLabel(d)) + "</td>" +
-        "<td>" + esc(d.score) + (d.corrected ? '<small title="模型输出与参与定义矛盾，已保留静默并修正评分">（原始 ' + esc(d.raw_score) + '）</small>' : "") + "</td>" +
-        "<td>" + esc(d.th) + "</td>" +
-        '<td><span class="pill ' + cls + '">' + text + "</span></td>" +
-        "<td>" + esc(REASON_LABEL[d.reason] || d.reason || "—") +
-        (d.stage ? '<small>' +
-          esc(STAGE_LABEL[d.stage] || d.stage) +
-          " · " + esc(d.mdl || "") + "</small>" : "") + "</td>" +
-        "<td>" + (typeof d.ms==="number" ? esc(d.ms)+"ms" : "—") + "</td>" +
-        "<td>" + rawCell + "</td>" +
-        "</tr>";
+      const identity=sessionIdentity(d);
+      const conversationTitle=identity.id
+        ? (identity.privateChat?"私聊QQ":"群聊群号")+"："+identity.id
+        : "旧记录未采集可识别的私聊QQ或群号";
+      const requestId=d.request_id || "";
+      const requestCell='<div class="decision-request"><span class="id-value">'+
+        esc(requestId || "旧记录未采集")+'</span>'+
+        (requestId ? '<button type="button" data-copy-id="'+esc(requestId)+'" aria-label="复制request_id">复制</button>' : '')+
+        '</div>';
+      const duration=decisionDuration(d);
+      const score=decisionScore(d);
+      return '<tr><td><span class="decision-conversation" title="'+esc(conversationTitle)+'">'+
+        esc(identity.id||"未采集")+'</span></td>'+
+        '<td>'+requestCell+'</td>'+
+        '<td class="decision-text-result">'+esc(textDecisionSummary(d))+'</td>'+
+        '<td class="decision-duration" title="'+esc(duration.title)+'">'+esc(duration.text)+'</td>'+
+        '<td class="decision-score '+score.state+'" title="'+esc(score.title)+'">'+esc(score.text)+'</td>'+
+        '<td><span class="pill '+cls+'">'+text+'</span></td>'+
+        '<td><button class="decision-action" type="button" data-decision="'+index+'">查看详情</button></td></tr>';
     }).join("");
-    Array.prototype.forEach.call(body.querySelectorAll(".raw-open"), (btn) => {
+    bindIdCopy(body);
+    Array.prototype.forEach.call(body.querySelectorAll(".decision-action"), (btn) => {
       btn.addEventListener("click", () => {
-        openRawModal(all[Number(btn.dataset.decision)], Number(btn.dataset.decision)+1);
+        openRawModal(all[Number(btn.dataset.decision)]);
       });
     });
   }
 
-  function openRawModal(row, number) {
+  let traceSequence=0;
+  const TRACE_STATUS={registered:"已注册",unregistered:"未注册",unsupported:"宿主不支持",unverified:"无法核实",
+    running:"执行中",success:"成功",failed:"失败",timeout:"超时",cancelled:"已取消",disabled:"未开启",
+    skipped:"未调用 / 跳过",uncollected:"未采集",completed:"已完成",awaiting_delivery:"等待最终投递",
+    active:"进行中",incomplete:"结束状态未采集",silent:"已静默",observed:"仅记录",merged:"已合并"};
+  const TRACE_NAMES={receive:"消息接收",input_parse:"输入解析",fragments:"碎片合并",recall:"撤回保护",
+    understanding:"输入理解监听",decision:"参与判定",contracts:"工具与回复要求",main_model:"主模型",
+    response:"模型响应",tool_start:"工具开始",tool_end:"工具结束",agent_done:"Agent完成",decorate:"结果处理",
+    send:"实际发送",text:"文字判断",vision:"识图判断",main_fallback:"图片主模型兜底",memory:"记忆交互",
+    embedding:"向量化",vector_index:"向量索引",memory_read:"文档读取",input_vision:"图片理解",
+    speech_to_text:"语音转写",tools:"同步工具",image_tool_attachment:"生图工具挂载",image_tool:"生图工具",
+    image_preflight:"生图预检",image_quota:"生图额度",image_api:"绘图API",image_download:"图片下载",
+    image_delivery:"图片投递",segments:"分段",expression:"排版 / 引用 / @",typing:"打字等待",
+    native_tts:"语音组件投递",native_text_image:"文本转图来源",context_revision:"上下文版本",
+    delivery:"最终投递",lifecycle:"请求状态",llm_request:"回复请求入口",decision_attempt:"判定尝试"};
+  const TRACE_PRIORITY=["failed","timeout","cancelled","running","awaiting_delivery","success","completed",
+    "silent","skipped","disabled","uncollected"];
+  function traceStage(trace, keys, fallback) {
+    const states=keys.map(key=>trace.features?.[key]?.status).filter(Boolean);
+    return states.sort((a,b)=>TRACE_PRIORITY.indexOf(a)-TRACE_PRIORITY.indexOf(b))[0] || fallback;
+  }
+  function traceReason(value) {
+    return value ? (REASON_LABEL[value]||value) : "";
+  }
+  async function loadRequestTrace(row, host, sequence) {
+    host.textContent="正在读取请求追踪…";
+    try {
+      const trace=await apiGet("console/request-trace",{request_id:row.request_id});
+      if(sequence!==traceSequence || !host.isConnected) return;
+      host.innerHTML="";
+      const title=document.createElement("h4");title.className="modal-sec";title.textContent="判断流程";host.appendChild(title);
+      const intro=document.createElement("p");intro.textContent="按实际处理顺序展示主要节点。";host.appendChild(intro);
+      const flow=document.createElement("ol");flow.className="request-flow";
+      const observed=row.mode==="shadow";
+      const decisionStatus=observed ? "observed" : row.action==="reply" ? "success" : "silent";
+      const modelStatus=traceStage(trace,["main_model","response","agent_done"],
+        observed || row.action==="reply" ? "uncollected" : "skipped");
+      const toolCalls=trace.summary?.tool_calls;
+      const toolStatus=toolCalls===0 ? "skipped" :
+        traceStage(trace,["tools","image_tool","image_preflight","image_quota","image_api","image_download",
+          "image_delivery"],"uncollected");
+      const sendStatus=trace.state==="completed" ? "success" :
+        trace.state==="silent" ? "skipped" :
+        traceStage(trace,["delivery","send","lifecycle"],trace.state||"uncollected");
+      const stages=[
+        ["接收消息",traceStage(trace,["receive","input_parse","fragments"],"uncollected"),
+          trace.features?.fragments?.status==="success"?"已完成碎片整理":"消息进入处理链路"],
+        ["判断是否参与",decisionStatus,observed
+          ? (row.action==="reply"?"判断放行":"判断静默 · "+
+            traceReason(row.reason||decisionData(row).model_reason||""))+"；仅记录，未拦截主回复"
+          : row.action==="reply"?"放行，允许进入回复生成":
+            "静默 · "+traceReason(row.reason||decisionData(row).model_reason||"")],
+        ["生成回复",modelStatus,modelStatus==="skipped"?"判断静默，未进入回复生成":
+          traceReason(trace.features?.main_model?.reason)||"主模型生成与Agent完成状态"],
+        ["执行工具",toolStatus,(toolCalls??"未采集")+" 次工具调用 · "+
+          (trace.summary?.image_api_calls??"未采集")+" 次绘图API"],
+        ["发送结果",sendStatus,(trace.summary?.sent_packets??"未采集")+" 包发送成功 · "+
+          (TRACE_STATUS[trace.state]||trace.state)+(trace.truncated?" · 记录已截断":"")],
+      ];
+      stages.forEach(([name,status,note],index)=>{
+        const item=document.createElement("li");
+        const number=document.createElement("span");number.className="flow-number";number.textContent=String(index+1);
+        const content=document.createElement("div");
+        const main=document.createElement("div");main.className="flow-main";
+        const label=document.createElement("b");label.textContent=name;
+        const state=document.createElement("span");state.className="flow-status";
+        state.textContent=TRACE_STATUS[status]||status;
+        const detail=document.createElement("div");detail.className="request-flow-note";detail.textContent=note;
+        main.append(label,state);content.append(main,detail);item.append(number,content);flow.appendChild(item);
+      });
+      host.appendChild(flow);
+
+      const technical=document.createElement("details");technical.className="trace-details";
+      const technicalSummary=document.createElement("summary");technicalSummary.textContent="展开请求标识、监听与功能明细";
+      technical.appendChild(technicalSummary);
+      const identity=document.createElement("div");
+      const session=sessionIdentity(row);
+      identity.innerHTML=idLine("session_id",session.complete?session.session:"","旧记录未采集完整会话ID")+
+        idLine("message_id",row.message_id||trace.message_id,"未采集平台消息ID");
+      technical.appendChild(identity);bindIdCopy(identity);
+      if(trace.merged_into) {
+        const merged=document.createElement("p");merged.textContent="碎片合并至："+trace.merged_into;
+        technical.appendChild(merged);
+      }
+      const coverageTitle=document.createElement("h4");coverageTitle.className="modal-sec";
+      coverageTitle.textContent="监听覆盖";technical.appendChild(coverageTitle);
+      const list=document.createElement("ul");list.className="trace-list";
+      Object.entries(trace.coverage||{}).forEach(([key,value])=>{
+        const li=document.createElement("li");li.textContent=(TRACE_NAMES[key]||key)+"："+(TRACE_STATUS[value.status]||value.status);
+        list.appendChild(li);
+      });technical.appendChild(list);
+      const featureTitle=document.createElement("h4");featureTitle.className="modal-sec";
+      featureTitle.textContent="功能执行";technical.appendChild(featureTitle);
+      const grid=document.createElement("div");grid.className="timing-grid";
+      const keys=[...new Set([...Object.keys(trace.features||{}),"native_tts","native_text_image"])];
+      keys.forEach(key=>{
+        const feature=trace.features?.[key]||{status:"uncollected"};
+        const cell=document.createElement("div");cell.className="timing-cell";
+        const b=document.createElement("b");b.textContent=TRACE_NAMES[key]||key;
+        const small=document.createElement("small");small.textContent=(TRACE_STATUS[feature.status]||feature.status)+
+          (typeof feature.ms==="number"?" · "+feature.ms+" ms":"")+
+          (typeof feature.calls==="number"?" · "+feature.calls+" 次":"")+
+          (feature.reason?" · "+(REASON_LABEL[feature.reason]||feature.reason):"");
+        cell.append(b,small);grid.appendChild(cell);
+      });technical.appendChild(grid);
+      host.appendChild(technical);
+
+      const eventsDisclosure=document.createElement("details");eventsDisclosure.className="trace-details";
+      const eventsSummary=document.createElement("summary");eventsSummary.textContent="展开完整工具与发送事件";
+      eventsDisclosure.appendChild(eventsSummary);
+      const events=document.createElement("ol");events.className="trace-list";
+      (trace.events||[]).filter(e=>["tools","image_tool","image_api","image_preflight","image_quota","image_delivery",
+        "image_download","send","delivery","context_revision","agent_done","lifecycle"].includes(e.feature)).forEach(e=>{
+        const li=document.createElement("li");
+        li.textContent=new Date(e.at*1000).toLocaleTimeString()+" · "+(TRACE_NAMES[e.feature]||e.feature)+" · "+
+          (TRACE_STATUS[e.status]||e.status)+(e.span_id?" · #"+e.span_id:"")+
+          (e.tool?" · "+e.tool:"")+(e.reason?" · "+(REASON_LABEL[e.reason]||e.reason):"")+
+          (e.types?" · "+e.types.join(" / "):"")+
+          (typeof e.before==="number"?" · 版本 "+e.before+" → "+e.after+" · 当前请求同步："+(e.synced?"是":"否"):"");
+        events.appendChild(li);
+      });
+      if(events.children.length) eventsDisclosure.appendChild(events);
+      else {
+        const empty=document.createElement("p");empty.textContent="没有采集到工具或发送事件。";
+        eventsDisclosure.appendChild(empty);
+      }
+      host.appendChild(eventsDisclosure);
+      const refresh=document.createElement("button");refresh.className="raw-open";refresh.textContent="刷新追踪";
+      refresh.addEventListener("click",()=>loadRequestTrace(row,host,++traceSequence));host.appendChild(refresh);
+    } catch(err) {
+      if(sequence!==traceSequence || !host.isConnected) return;
+      host.textContent="本次生成/发送追踪未采集或暂不可读："+err.message;
+    }
+  }
+  function openRawModal(row) {
+    const sequence=++traceSequence;
     const d=decisionData(row);
     const chat=chatData(row);
-    el("rawModalTitle").textContent = "第 " + number + " 条判定 · " + fmtTime(row.ts);
+    el("rawModalTitle").textContent = "判断详情 · " + fmtTime(row.ts);
     const body = el("rawModalBody");
     body.innerHTML = "";
     const summary=document.createElement("div");
     summary.className="decision-summary";
-    const values=[
-      ["最终结果",row.action==="reply"?"放行（允许生成，不代表已发送）":"静默"],
-      ["会话",sessionLabel(row)],
+    const result=document.createElement("p");const resultLabel=document.createElement("b");
+    resultLabel.textContent="判断结果：";
+    result.append(resultLabel,document.createTextNode(row.action==="reply"?"放行":"静默"));
+    summary.appendChild(result);
+    if(row.mode==="shadow") {
+      const observed=document.createElement("p");observed.className="chat-meta";
+      observed.textContent="观察模式：此判断结论仅记录，未执行参与拦截。";
+      summary.appendChild(observed);
+    }
+    const request=document.createElement("div");
+    request.innerHTML=idLine("request_id",row.request_id,"旧记录未采集请求ID");
+    summary.appendChild(request);bindIdCopy(request);
+    body.appendChild(summary);
+    const traceHost=document.createElement("div");body.appendChild(traceHost);
+    if(row.request_id) loadRequestTrace(row,traceHost,sequence);
+    else traceHost.textContent="旧记录未采集生成/发送追踪。";
+
+    const detailDisclosure=document.createElement("details");
+    detailDisclosure.className="record-disclosure";
+    const detailSummary=document.createElement("summary");
+    detailSummary.textContent="展开判定依据、上下文与原始资料";
+    const detailBody=document.createElement("div");
+    detailDisclosure.append(detailSummary,detailBody);body.appendChild(detailDisclosure);
+    const section=(title, text)=>{
+      const h=document.createElement("h4"); h.className="modal-sec"; h.textContent=title; detailBody.appendChild(h);
+      if(text) {const p=document.createElement("p");p.textContent=text;detailBody.appendChild(p);}
+    };
+    section("判定摘要");
+    const overview=document.createElement("div");overview.className="timing-grid";
+    [
       ["参与适合度",String(row.score ?? "—")+" / 100 · 阈值 "+String(row.th ?? "—")],
       ["模型动作",d.act==="reply"?"建议参与":d.act==="silent"?"建议静默":"未记录"],
       ["理解状态",understanding(d.understood)],
@@ -1870,16 +2253,17 @@
       ["本次用时",String(row.ms ?? "—")+" ms"],
       ["图片上下文",String(row.available_image_count ?? row.image_count ?? 0)+" 张可用 · "+
         String(row.image_cache_hits || 0)+" 张命中缓存"],
-    ];
-    values.forEach(([label,value])=>{
-      const p=document.createElement("p"); const b=document.createElement("b");
-      b.textContent=label+"："; p.append(b,document.createTextNode(value)); summary.appendChild(p);
+    ].forEach(([label,value])=>{
+      const cell=document.createElement("div");cell.className="timing-cell";
+      const b=document.createElement("b");b.textContent=label;
+      const small=document.createElement("small");small.textContent=value;cell.append(b,small);overview.appendChild(cell);
     });
-    body.appendChild(summary);
-    const section=(title, text)=>{
-      const h=document.createElement("h4"); h.className="modal-sec"; h.textContent=title; body.appendChild(h);
-      if(text) {const p=document.createElement("p");p.textContent=text;body.appendChild(p);}
-    };
+    detailBody.appendChild(overview);
+    const observationRules=Array.isArray(chat?.observation_rules)?chat.observation_rules:[];
+    if(row.mode==="shadow") section("观察模式",
+      "判断结论只用于记录，线上继续主回复。"+
+      (observationRules.length ? " 未拦截的本地规则："+observationRules.map(
+        rule=>REASON_LABEL[rule]||rule).join("、")+"。" : " 本次没有命中额外本地参与规则。"));
     section("能力耗时", "文字复判累计计入文字判断。记忆交互总耗时包含向量化、检索与文档读取；并发分支可能重叠，不能相加作为总耗时。");
     const grid=document.createElement("div");grid.className="timing-grid";
     const metrics = row.timings || {};
@@ -1901,24 +2285,33 @@
         (a.called || ["ok","timeout","error","parse_error"].includes(a.status)));
       const value=metric && typeof metric.ms==="number" ? metric :
         legacy.length ? {ms:legacy.reduce((n,a)=>n+a.ms,0),calls:legacy.length,status:"旧记录"} : null;
-      const missing = metrics.version ? (["text","vision","main_fallback","memory"].includes(key)
-        || !metrics.memory || metrics.retrieval_collected ? "未调用" : "未采集") : "未采集（旧记录）";
+      const missing = metrics.version && ["text","vision","main_fallback","memory"].includes(key)
+        ? "未调用（此判定分支）" : "未采集";
       const small=document.createElement("small");
       small.textContent=value ? value.ms+" ms · "+value.calls+" 次 · "+
         (STATUS_LABEL[value.status] || ({empty:"无可用记忆",cancelled:"已取消"})[value.status] || value.status)
         : missing;
       cell.append(b,small);grid.appendChild(cell);
     });
-    body.appendChild(grid);
+    detailBody.appendChild(grid);
     if(row.corrected) section("分数修正", "模型原始给分 "+row.raw_score+
       "，与静默或未理解状态矛盾；插件保留否决，参与适合度修正为 "+row.score+"。");
     const attempts=Array.isArray(row.attempts)?row.attempts:[];
     if(attempts.length) {
       section("模型调用过程 · "+attempts.length+" 次尝试");
       const list=document.createElement("ol"); list.className="attempt-list";
+      const textAttempts=attempts.filter(a=>a.stage==="text");
+      let textAttemptIndex=0;
       attempts.forEach(a=>{
         const li=document.createElement("li");
-        li.textContent=(STAGE_LABEL[a.stage]||a.stage)+" · "+(a.model||"未选到模型")+" · "+
+        let stageLabel=STAGE_LABEL[a.stage]||a.stage;
+        if(a.stage==="text") {
+          textAttemptIndex++;
+          if(textAttempts.length>1) stageLabel=textAttemptIndex===1
+            ? "文字初判"
+            : (row.memory_grounded?"文字复判（补查记忆后）":"文字复判");
+        }
+        li.textContent=stageLabel+" · "+(a.model||"未选到模型")+" · "+
           (STATUS_LABEL[a.status]||a.status)+" · "+
           (a.called===false || (!a.called && !["ok","error","timeout","parse_error"].includes(a.status))
             ? "未调用" : (a.ms ?? "未采集")+" ms");
@@ -1930,7 +2323,7 @@
         }
         list.appendChild(li);
       });
-      body.appendChild(list);
+      detailBody.appendChild(list);
     }
     const summaries=Array.isArray(d.image_summaries)?d.image_summaries.filter(item=>item && typeof item==="object"):[];
     if(summaries.length) {
@@ -1944,23 +2337,27 @@
           (source.sender_id ? " · "+source.sender_id : "")+"）":"")+"："+item.summary;
         if(item.uncertainty) p.textContent+="\n不确定点："+item.uncertainty;
         if(item.cached) p.textContent+="\n来自缓存（"+item.cache_age_seconds+" 秒前识别），本次未重复识别此图。";
-        p.className="chat-text";body.appendChild(p);
+        p.className="chat-text";detailBody.appendChild(p);
       });
     }
     section("参与判断的消息", contextNote(row)+"。"+(chat?.not_sent ?
       "本次没有发送模型请求，下面仅显示被规则过滤或取模型失败的候选消息。" :
       "下面是本次判定实际参考的内容，序号按输入顺序排列；当前消息单列，不代表它一定晚于等待期间的新消息。"));
     if(chat) {
-      const lines=Array.isArray(chat.recent_messages_old_to_new)?chat.recent_messages_old_to_new:[];
+      const lines=Array.isArray(chat.reference_messages_old_to_new)
+        ? chat.reference_messages_old_to_new
+        : (Array.isArray(chat.recent_messages_old_to_new)?chat.recent_messages_old_to_new:[]);
       const list=document.createElement("ol");list.className="chat-messages";
       [...lines.map(chatMessage),chat.current_message].forEach((message,index)=>{
         const li=document.createElement("li");
-        if(index===lines.length) li.className="current";
+        const current=index===lines.length;
+        if(current) li.className="current";
         const meta=document.createElement("div");meta.className="chat-meta";
-        meta.textContent=(index===lines.length?"当前消息 · ":"参考流水 · ")+
-          (message.sender_name||message.sender_id||"未记录发送者")+
-          (message.sender_id && message.sender_name ? "（"+message.sender_id+"）":"")+
-          (message.age_seconds!=null ? " · "+message.age_seconds+" 秒前":"");
+        meta.textContent=message.is_omission ? "流水说明（不计消息条数）" :
+          (current?"当前消息 · ":"参考流水 · ")+
+            (message.sender_name||message.sender_id||"未记录发送者")+
+            (message.sender_id && message.sender_name ? "（"+message.sender_id+"）":"")+
+            (message.age_seconds!=null ? " · "+message.age_seconds+" 秒前":"");
         const content=document.createElement("div");content.className="chat-text";
         content.textContent=message.text||"[图片或空文字消息]";
         li.append(meta,content);
@@ -1975,27 +2372,30 @@
         });
         list.appendChild(li);
       });
-      body.appendChild(list);
+      detailBody.appendChild(list);
       if(chat.recent_bot_message) section("补充：机器人近期上一句（不另计消息条数）",chat.recent_bot_message);
-      if(chat.scoped_memory?.length) section("补充：本会话背景记忆（不计流水条数）",chat.scoped_memory.join("\n"));
+      const background=Array.isArray(chat.background_memory)
+        ? chat.background_memory
+        : (Array.isArray(chat.scoped_memory)?chat.scoped_memory:[]);
+      if(background.length) section("补充：本会话背景资料（不计流水条数）",
+        "事实记忆由 LivingMemory 统一检索；关系状态与消息感知当前由从绫装配。\n\n"+
+        background.join("\n"));
     } else {
       const p=document.createElement("p");p.className="chat-text";
       p.textContent=row.ctx || "原记录未保存上下文；规则过滤或调用失败时可能没有发送判定请求。";
-      body.appendChild(p);
+      detailBody.appendChild(p);
     }
-    const disclosure=document.createElement("details");disclosure.className="record-disclosure";
-    const caption=document.createElement("summary");caption.textContent="原始输出与请求资料（排查时展开）";
-    disclosure.appendChild(caption);
+    section("原始输出与请求资料");
     [row.raw,row.ctx].forEach((value,index)=>{
       const h=document.createElement("h4");h.textContent=index===0?"模型原始输出":"判定原始输入";
       const pre=document.createElement("pre");pre.textContent=value||"未记录";
-      disclosure.append(h,pre);
+      detailBody.append(h,pre);
     });
-    body.appendChild(disclosure);
     toggleDialog("rawModal", true);
   }
 
   function closeRawModal() {
+    traceSequence++;
     toggleDialog("rawModal", false);
   }
 
@@ -2005,9 +2405,7 @@
       title: "闸门模式（总开关）",
       items: [
         { name: "硬闸门", key: "gate_mode=enforce", desc: "日常运行。静默消息不会生成回复；主模型仍可能用于图片异常兜底判定。", ex: "阈值 50、参与分 30：不生成回复。结束话题即使误得高分也不放行。" },
-        { name: "观察模式", key: "gate_mode=shadow", desc: "继续判定和记录，但不按判定结果拦截回复；生成费用可能增加。", ex: "想观察新模型的打分尺度时使用。判定静默也可能继续生成回复。" },
-        { name: "旧行为", key: "gate_mode=legacy", desc: "先生成再丢弃（旧逻辑），只在回滚时用，平时别选。", ex: "新逻辑出问题时临时切回，保证行为可预期。" },
-        { name: "关闭参与判断", key: "gate_mode=off", desc: "不做参与评分；回复方式、模拟耗时和撤回保护分别控制。", ex: "停用过滤时仍可保持引用/@回复方式。" },
+        { name: "观察模式", key: "gate_mode=shadow", desc: "同步完成判断并记录，但本地参与规则和模型结论都不拦截主回复；仍会产生判断等待与API用量。", ex: "判断为静默时仍继续主回复。碎片等待、撤回保护、私聊范围和平台发送失败仍按各自设置处理。" },
       ],
     },
     ...FIELD_GROUPS.map(group => ({
@@ -2019,7 +2417,7 @@
       items: [
         { name: "分数分布与阈值扫描", key: "distribution", desc: "按文字判定模型和新协议统计；视觉/兜底样本不混入。样本放行率不保证将来发言比例。", ex: "点一个建议阈值只会填入参数，仍需保存；还应检查互聊、停口是否被正确静默。" },
         { name: "文字试跑", key: "probe", desc: "不发消息、不计插件统计和预算，但实际调用模型API；只支持文字输入。", ex: "填「怎么加点？」和机器人上一句，查看得分和原因。" },
-        { name: "最近判定", key: "decisions", desc: "可搜索群ID、私聊QQ、原话或上下文。详情展示能力耗时、模型过程、图片摘要与聊天内容；旧记录未采集的耗时不显示为0。", ex: "输入群ID定位该群的判定；输入私聊QQ定位私聊。记忆交互耗时包含向量化与检索，不将重叠项相加。" },
+        { name: "最近判定", key: "decisions", desc: "默认显示最近10条的对话ID、request_id、文字判断原因、判断总耗时、参与分/本次阈值、最终结果和详情入口。详情先展示五个编号主节点，其余监听、耗时和上下文按需展开。", ex: "对话ID显示私聊QQ或群号；参与分达到本次历史阈值显示绿色，低于阈值显示红色。总耗时不含正文生成与发送；放行不等于已发送。" },
         { name: "保存与放弃", key: "save", desc: "只有点击保存后配置才生效。放弃更改只撤销当前页面未保存的值。", ex: "调两项后底部显示「2项未保存」；点保存统一更新。" },
       ],
     },
@@ -2241,7 +2639,7 @@
         const data=await apiPost("console/native-settings",{
           config_id:nativeData.config_id,expected_revision:settingsData.revision,values:settingsDraft});
         settingsData={...settingsData,...data}; settingsDraft={};
-        saved.push("模型与人格已同步原生配置");
+        saved.push("模型、人格与语音回复已同步原生配置");
       } catch(err) { errors.push("原生设置保存失败："+err.message); }
     }
     if (Object.keys(imageDraft).length) {
@@ -2299,14 +2697,18 @@
         context_lines:el("probeContext").value.split("\n").filter(s=>s.trim()),private:el("probePrivate").checked,
         config_id:nativeData?.config_id||preferredNativeProfile });
       const d = data.decision || {};
+      const mode=data.flow?.mode?.id || state.mode;
+      const online=mode==="shadow" ? "继续回复（观察模式不拦截）" :
+        (d.action==="reply" ? "继续生成" : "停止生成");
       const box = el("probeOut");
       box.className = "probe-out show";
       box.innerHTML =
         '<div class="kv" style="margin-top:0">' +
         "<span>分数 <b>" + esc(d.score) + "</b></span>" +
         "<span>阈值 <b>" + esc(d.threshold) + "</b></span>" +
-        "<span>结论 <b>" + (d.action === "reply" ? "放行" : "静默") + "</b></span>" +
-        "<span>原因 <b>" + esc(REASON_LABEL[d.reason] || d.reason) + "</b></span>" +
+        "<span>判断结论 <b>" + (d.action === "reply" ? "放行" : "静默") + "</b></span>" +
+        "<span>判断原因 <b>" + esc(REASON_LABEL[d.reason] || d.reason) + "</b></span>" +
+        "<span>线上处理 <b>" + esc(online) + "</b></span>" +
         "<span>耗时 <b>" + esc(d.latency_ms) + "ms</b></span>" +
         "</div>" +
         '<div class="msg" style="margin-top:6px">模型原话：' + esc(data.raw || "（无）") + "</div>";
@@ -2344,7 +2746,7 @@
     loadNative(el("nativeScope").value);
   });
   el("profileScopeHelp").addEventListener("click",ev=>{
-    ev.preventDefault();nativeHelp("编辑范围","默认沿用已保存的AstrBot配置范围。人格、主模型、回退和分段只保存到此范围；实际会话分配仍由AstrBot管理。");
+    ev.preventDefault();nativeHelp("AstrBot配置人格","配置选择记录在服务端，刷新后继续编辑同一配置。此处人格与原生人格共用，手动选择并保存后固定；主模型、回退和分段也只保存到此配置。实际会话分配仍由AstrBot管理。");
   });
   el("flowReload").addEventListener("click", loadFlow);
   el("imageGroupHelp").addEventListener("click",ev=>{
@@ -2361,7 +2763,7 @@
       item.setAttribute("aria-pressed", String(item === button)));
     renderDecisions();
     if (state.category || state.q.trim()) searchDecisions();
-    else el("decisionSearchStatus").textContent = "默认展示最近100条；搜索覆盖已恢复的最近600条记录。";
+    else el("decisionSearchStatus").textContent = "默认展示最近10条；搜索覆盖已恢复的最近600条记录。";
   });
   document.querySelectorAll(".page-tabs button").forEach((btn, index, buttons)=>{
     btn.addEventListener("click", ()=>selectPage(btn.dataset.page));
@@ -2439,7 +2841,7 @@
       renderDecisions();
       clearTimeout(searchTimer);
       if (state.q.trim() || state.category) searchTimer=setTimeout(searchDecisions,250);
-      else el("decisionSearchStatus").textContent="默认展示最近100条；搜索覆盖已恢复的最近600条记录。";
+      else el("decisionSearchStatus").textContent="默认展示最近10条；搜索覆盖已恢复的最近600条记录。";
     });
     await load(true);
     await loadNative();

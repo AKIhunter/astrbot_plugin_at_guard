@@ -5,6 +5,7 @@ import asyncio
 import base64
 import copy
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 import hashlib
 import json
@@ -15,22 +16,28 @@ import sqlite3
 import tempfile
 import time
 from urllib.parse import urlsplit
+from types import SimpleNamespace
 
 try:
     from .guard_native_reply import NativeReplyError, revision
+    from .guard_router_connections import router_connections, CHAT_TYPES
+    from .guard_request_trace import emit, TRACE_KEY, touch
 except ImportError:
     from guard_native_reply import NativeReplyError, revision
+    from guard_router_connections import router_connections, CHAT_TYPES
+    from guard_request_trace import emit, TRACE_KEY, touch
 
 TOOL_NAME = "livinghello_generate_image"
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+IMAGE_EVENT = ContextVar("livinghello_image_event", default=None)
 FIELDS = {
     "enabled": ("启用AI生图", "bool", "主模型可按需要调用文生图或图生图工具，关闭后不提供工具。"),
     "provider_id": ("生图模型 / 路由上游", "provider", "复用AstrBot已注册模型或多API路由的具体上游连接，不读取BiliBot。所选API必须实际支持生图。"),
     "model": ("生图模型名称（可选）", "string", "留空使用所选模型名；同一API的生图模型名可在此指定。不会更改主对话模型。"),
     "protocol": ("生图接口", "protocol", "标准图片接口使用images/generations和images/edits；对话生图接口使用chat/completions的image模态。"),
     "daily_limit": ("每日生图次数上限", "int", "全插件共用，按服务器本地自然日重置。每次上游请求计一次，失败和结果未知也计数；0禁止生图，重载不清零。"),
-    "size": ("生成尺寸", "size", "使用服务支持的尺寸；每次只请求1张图片。"),
-    "timeout_seconds": ("生图超时（秒）", "int", "10~180秒，超时不会换上游补发，防止重复收费。原自主回复时效仍生效。"),
+    "size": ("生成尺寸", "size", "使用服务支持的尺寸，建议分辨率范围512x512~2048x2048；可选自定义宽高。每次只请求1张图片。"),
+    "timeout_seconds": ("生图超时（秒）", "int", "10~500秒，超时不会换上游补发，防止重复收费。原自主回复时效仍生效。"),
 }
 DEFAULTS = dict(enabled=False, provider_id="", model="", protocol="images",
                 daily_limit=20, size="1024x1024", timeout_seconds=90)
@@ -69,10 +76,12 @@ class ImageSettings:
             pid = str(config.get("id") or "")
             if not pid or config.get("enable") is False:
                 continue
-            upstreams = getattr(provider, "upstreams", None)
+            upstreams = getattr(provider, "all_upstreams", None) or getattr(provider, "upstreams", None)
             if config.get("type") == "multi_api_router" and upstreams:
                 parent = str(config.get("parent_provider_id") or pid.split(":upstream_", 1)[0])
                 for upstream in upstreams:
+                    if getattr(upstream, "api_type", "chat") not in CHAT_TYPES | {"image_generation"}:
+                        continue
                     client = getattr(upstream, "client", None)
                     slot = getattr(upstream, "slot", 0)
                     if client is not None and slot:
@@ -80,6 +89,13 @@ class ImageSettings:
                             client, str(getattr(upstream, "name", "") or f"上游 {slot}"), "router_upstream")
             elif config.get("type") != "multi_api_router":
                 targets[pid] = (provider, str(config.get("display_name") or pid), "provider")
+        for pid, config in router_connections(self.context).items():
+            if config["api_type"] not in CHAT_TYPES | {"image_generation"}:
+                continue
+            # image_generation不在get_all_providers内；这里只复用连接，不创建聊天客户端。
+            connection = SimpleNamespace(provider_config=config,
+                                         get_model=lambda model=config["model"]: model)
+            targets[pid] = (connection, config["display"], "router_upstream")
         return targets
 
     def _public_targets(self):
@@ -129,12 +145,15 @@ class ImageSettings:
             if key == "enabled":
                 valid = isinstance(value, bool)
             elif key in {"daily_limit", "timeout_seconds"}:
-                low, high = (0, 1000) if key == "daily_limit" else (10, 180)
+                low, high = (0, 1000) if key == "daily_limit" else (10, 500)
                 valid = isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
             elif key == "protocol":
                 valid = isinstance(value, str) and value in {"images", "chat_images"}
             elif key == "size":
                 valid = isinstance(value, str) and value in {"auto", "1024x1024", "1536x1024", "1024x1536"}
+                if not valid and isinstance(value, str):
+                    match = re.fullmatch(r"(\d{3,4})x(\d{3,4})", value)
+                    valid = bool(match) and 512 <= int(match.group(1)) <= 2048 and 512 <= int(match.group(2)) <= 2048
             else:
                 valid = isinstance(value, str) and len(value) <= 200
             if not valid:
@@ -218,9 +237,11 @@ class ImageSettings:
 
     def attach(self, event, req):
         if self._closed or self.error or not self.values["enabled"] or self.values["daily_limit"] == 0:
+            emit(event, "image_tool_attachment", "disabled", reason="image_unavailable")
             return
         tool = self.ensure_tool()
         if tool is None:
+            emit(event, "image_tool_attachment", "failed", reason="tool_import_failed")
             return
         from astrbot.core.agent.tool import ToolSet
         # 复制工具集，避免在共享人格工具集中污染其他请求。
@@ -230,6 +251,7 @@ class ImageSettings:
         if not any(t.name == TOOL_NAME for t in tools.tools):
             tools.add_tool(tool)
         req.func_tool = tools
+        emit(event, "image_tool_attachment", "success", tool=TOOL_NAME)
 
     def blocked(self, event):
         if self._closed or event.get_extra("_at_guard_delivery_blocked"):
@@ -285,55 +307,100 @@ class ImageSettings:
         return result[:1]
 
     async def generate(self, event, prompt, use_reference=False):
+        service = event.get_extra(TRACE_KEY)
+        # 同步工具内部步骤关联宿主span，次数仍只在实际调用边界累计。
+        parent_span = next(reversed(event.get_extra("_livinghello_tool_spans", {}).values()), None)
+        span = service.start(event, "image_tool", tool=TOOL_NAME, parent_span=parent_span) if service else None
+        # 生图内部调用与宿主tool-start共用请求，但不重复累计工具次数。
+        if service and not event.get_extra("_livinghello_tool_spans"):
+            service.increment(event, "tool_calls")
+        emit(event, "image_api", "skipped", calls=0, reason="preflight")
+        def outcome(status, reason):
+            emit(event, "image_preflight", status, reason=reason)
+            if service:
+                service.end(event, span, status, reason=reason)
         if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 4000 or not isinstance(use_reference, bool):
+            outcome("failed", "invalid_parameters")
             return "生图参数无效：需要1~4000字的描述及图生图开关。"
         if self._closed or self.error or not self.values["enabled"]:
+            outcome("disabled", "image_disabled")
             return "AI生图未启用。"
         if self.blocked(event):
+            reason = event.get_extra("_at_guard_delivery_blocked") or self.plugin._stale_reason(
+                event, self.plugin._group_key(event)) or "reply_cancelled"
+            outcome("cancelled", reason)
             return "当前回复已取消，未请求生图。"
         values = copy.deepcopy(self.values)
         request_id = None
         task = asyncio.current_task()
         self._tasks.add(task)
+        token = IMAGE_EVENT.set(event)
+        terminal_status, terminal_reason = "failed", "preflight_failed"
         try:
             connection = self.connection(values)
             refs = self.references(event) if use_reference else []
             if use_reference and not refs:
+                terminal_reason = "reference_missing"
                 return "图生图需要本次消息或引用中的图片，请用户补充图片。"
             # 上传前读来源；无效图片不计生图额度。
             reference = await self._reference_data(refs[0], values) if refs else None
             async with self.lock:
                 if self.blocked(event) or self.values != values or not self.values["enabled"]:
+                    terminal_status, terminal_reason = "cancelled", "reply_or_config_changed"
                     return "回复或生图配置已变化，未请求生图。"
                 # 参考图下载可能跨过模型重载；请求前重新解析当前注册连接。
                 connection = self.connection(values)
                 request_id = self.reserve(event, prompt.strip(), use_reference)
             if not request_id:
+                terminal_status, terminal_reason = "skipped", "duplicate_image_call"
                 return "本条消息已请求过相同生图，结果可能已发送或未知，请勿重复调用。"
+            emit(event, "image_quota", "success", reason="reserved")
+            emit(event, "image_preflight", "success")
             image = await asyncio.wait_for(self._request(
                 values, connection, prompt.strip(), reference),values["timeout_seconds"])
             if self.blocked(event) or not self.values["enabled"]:
                 self.mark(request_id, "cancelled")
+                terminal_status, terminal_reason = "cancelled", "reply_cancelled_after_generation"
+                emit(event, "image_delivery", "cancelled", reason=terminal_reason)
                 return "图片已生成但回复已取消，未发送；本次仍计额度。"
             # 沿用事件原生发送；图片先发送，工具结果再回主模型组织简短说明。
             from astrbot.api.message_components import Image
             await event.send(event.chain_result([Image.fromFileSystem(str(image))]))
             if event.get_extra("_at_guard_delivery_blocked"):
                 self.mark(request_id, "cancelled")
+                terminal_status, terminal_reason = "cancelled", "reply_cancelled_before_image_send"
+                emit(event, "image_delivery", "cancelled", reason=terminal_reason)
                 return "发送前回复已取消，未发送图片；本次仍计额度。"
             self.mark(request_id, "sent")
+            terminal_status, terminal_reason = "success", "image_sent"
+            emit(event, "image_delivery", "success")
             return "图片已发送到当前会话。请简短回应，不要再次生成或伪造图片链接。"
         except asyncio.CancelledError:
+            terminal_status, terminal_reason = "cancelled", "task_cancelled"
             if request_id:
                 self.mark(request_id, "unknown")
             raise
         except Exception as exc:
+            terminal_status = "timeout" if isinstance(exc, asyncio.TimeoutError) else "failed"
+            terminal_reason = "quota_exhausted" if isinstance(exc, NativeReplyError) and getattr(
+                exc, "status_code", None) == 429 else "image_exception"
+            if isinstance(exc, NativeReplyError) and "今日生图次数" in str(exc):
+                terminal_reason = "quota_exhausted"
+                emit(event, "image_quota", "skipped", reason=terminal_reason)
+            emit(event, "image_error", terminal_status, reason=terminal_reason, error_type=type(exc).__name__)
+            if service:
+                row = service.rows.get(event.get_extra("_livinghello_request_id"), {})
+                if row.get("features", {}).get("image_api", {}).get("status") == "running":
+                    emit(event, "image_api", terminal_status, reason=terminal_reason)
             if request_id:
                 self.mark(request_id, "unknown")
             # 错误只展示受控提示，不将URL、密钥或服务响应正文送给模型。
             message = str(exc) if isinstance(exc, NativeReplyError) else "接口异常或超时"
             return f"生图未完成：{message}。已请求的次数仍计额度；结果未知时不要自动重试。"
         finally:
+            if service:
+                service.end(event, span, terminal_status, reason=terminal_reason)
+            IMAGE_EVENT.reset(token)
             self._tasks.discard(task)
 
     @staticmethod
@@ -363,6 +430,23 @@ class ImageSettings:
         raise NativeReplyError("只支持PNG、JPEG或WebP图片")
 
     async def _download(self, url, timeout):
+        event = IMAGE_EVENT.get()
+        started = time.monotonic()
+        if event:
+            emit(event, "image_download", "running")
+        try:
+            data = await self._download_raw(url, timeout)
+            if event:
+                emit(event, "image_download", "success", ms=round((time.monotonic()-started)*1000, 2))
+            return data
+        except BaseException as exc:
+            if event:
+                emit(event, "image_download", "cancelled" if isinstance(exc, asyncio.CancelledError) else
+                     "timeout" if isinstance(exc, asyncio.TimeoutError) else "failed",
+                     error_type=type(exc).__name__)
+            raise
+
+    async def _download_raw(self, url, timeout):
         import aiohttp
         if urlsplit(url).scheme not in {"https", "http"}:
             raise NativeReplyError("图片URL格式不支持")
@@ -421,6 +505,13 @@ class ImageSettings:
             body = {"json": request}
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=values["timeout_seconds"]),
                                         trust_env=True) as session:
+            event = IMAGE_EVENT.get()
+            started = time.monotonic()
+            if event:
+                service = event.get_extra(TRACE_KEY)
+                if service:
+                    service.increment(event, "image_api_calls")
+                emit(event, "image_api", "running", calls=1, model=model)
             async with session.post(base + endpoint, headers=headers, allow_redirects=False, **body) as response:
                 if response.status not in {200, 201}:
                     raise NativeReplyError(f"生图接口HTTP {response.status}")
@@ -434,6 +525,8 @@ class ImageSettings:
                     chunks.append(chunk)
                 raw = b"".join(chunks)
                 payload = json.loads(raw)
+        if event:
+            emit(event, "image_api", "success", calls=1, ms=round((time.monotonic()-started)*1000, 2))
         image_value = self.extract(payload)
         data, mime = (await self._download(image_value, values["timeout_seconds"])
                       if image_value.startswith(("https://", "http://")) else self._image_bytes(image_value))
@@ -452,6 +545,10 @@ class ImageSettings:
     def extract(payload):
         if not isinstance(payload, dict) or payload.get("error"):
             raise NativeReplyError("生图服务返回错误或无效响应")
+        # 保留线上阿里百炼兼容响应：output.choices[].message.content[].image。
+        out = payload.get("output")
+        if isinstance(out, dict) and not payload.get("data") and not payload.get("choices"):
+            payload = out
         rows = payload.get("data", [])
         choices = payload.get("choices", [])
         message = (choices[0].get("message", {}) if choices and isinstance(choices[0], dict) else {})
@@ -462,7 +559,7 @@ class ImageSettings:
         for item in rows if isinstance(rows, list) else []:
             if isinstance(item, dict):
                 nested = item.get("image_url", {})
-                value = item.get("b64_json") or item.get("url") or (
+                value = item.get("b64_json") or item.get("url") or item.get("image") or (
                     nested.get("url") if isinstance(nested, dict) else nested)
             else:
                 value = item

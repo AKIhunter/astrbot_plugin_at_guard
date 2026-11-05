@@ -98,6 +98,21 @@ class UnderstandingTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("直接引用", observation.text)
         self.assertNotIn("更深引用", observation.text)
 
+    async def test_fetched_quote_mapping_keeps_image_source(self):
+        self.event.bot = SimpleNamespace(call_action=AsyncMock(return_value={"data": {
+            "message": [{"type": "image", "data": {"url": "history.png"}}]}}))
+        observation = await self.parse([
+            Reply(id="history", sender_nickname="原作者")
+        ])
+        self.assertEqual(observation.images, ["history.png"])
+        self.assertEqual(observation.image_sources, [{
+            "source": "quoted",
+            "sender": "原作者",
+            "message_id": "history",
+        }])
+        self.event.bot.call_action.assert_awaited_once_with(
+            "get_msg", message_id="history")
+
     async def test_cards_extract_nested_miniprogram_and_malformed_raw(self):
         observation = await self.parse([component("Json", data={
             "app": "com.tencent.miniapp", "meta": {"detail": {"title": "标题", "qqdocurl": "https://example.invalid"}}}),
@@ -197,6 +212,49 @@ class UnderstandingTest(unittest.IsolatedAsyncioTestCase):
 
 
 class ExpressionMediaTest(unittest.IsolatedAsyncioTestCase):
+    async def test_event_hook_claims_quote_image_before_congling(self):
+        guard = plugin(gate_config(
+            expression_takeover_enabled=True,
+            understand_image_enabled=True,
+        ))
+        native = SimpleNamespace(enabled_for=lambda event: True)
+        guard.context = SimpleNamespace(get_registered_star=lambda _: SimpleNamespace(
+            activated=True, star_cls=native))
+        event = Event(group="native")
+        chain = [Reply(id="quoted", chain=[Image(url="history.png")])]
+        event._mentions = chain
+        event.message_obj.message = chain
+        guard._record_incoming = Mock()
+        reader = guard._understanding()
+        reader.parse = AsyncMock()
+
+        await guard.parse_reply_input(event)
+
+        self.assertEqual(
+            event.get_extra("_livinghello_image_owner"), "livinghello")
+        reader.parse.assert_awaited_once_with(event)
+
+    async def test_disabled_image_understanding_does_not_claim_from_congling(self):
+        guard = plugin(gate_config(
+            expression_takeover_enabled=True,
+            understand_image_enabled=False,
+        ))
+        native = SimpleNamespace(enabled_for=lambda event: True)
+        guard.context = SimpleNamespace(get_registered_star=lambda _: SimpleNamespace(
+            activated=True, star_cls=native))
+        event = Event(group="native")
+        chain = [Reply(id="quoted", chain=[Image(url="history.png")])]
+        event._mentions = chain
+        event.message_obj.message = chain
+        guard._record_incoming = Mock()
+        reader = guard._understanding()
+        reader.parse = AsyncMock()
+
+        await guard.parse_reply_input(event)
+
+        self.assertIsNone(event.get_extra("_livinghello_image_owner"))
+        reader.parse.assert_not_awaited()
+
     async def test_media_plugins_are_never_selected_cancelled_or_counted(self):
         guard = plugin(gate_config(expression_takeover_enabled=True, expression_sticker_enabled=True,
                                    expression_voice_enabled=True))
@@ -228,6 +286,139 @@ class ExpressionMediaTest(unittest.IsolatedAsyncioTestCase):
         req = SimpleNamespace(extra_user_content_parts=[])
         await reader.attach(Event(group="independent"), req)
         self.assertEqual(len(req.extra_user_content_parts), 1)
+
+    async def test_congling_quote_image_uses_livinghello_vision_once(self):
+        guard = plugin(gate_config(
+            expression_takeover_enabled=True,
+            understand_image_enabled=True,
+            understand_image_provider_id="own-vision",
+            understand_voice_enabled=True,
+        ))
+        native = SimpleNamespace(enabled_for=lambda event: True)
+        provider = SimpleNamespace(
+            get_model=lambda: "qwen3-vl",
+            provider_config={"modalities": ["image"]},
+            text_chat=AsyncMock(return_value=SimpleNamespace(
+                completion_text="画面里有三张蓝色风景图")),
+        )
+        guard.context = SimpleNamespace(
+            get_registered_star=lambda _: SimpleNamespace(
+                activated=True, star_cls=native),
+            get_provider_by_id=Mock(return_value=provider),
+        )
+        event = Event(group="native")
+        url = "https://example.invalid/history.png"
+        event.message_obj.message = [
+            Reply(id="quoted-message", sender_nickname="恰比",
+                  chain=[Image(url=url)]),
+            Plain("你在哪儿找的这些图"),
+        ]
+        event.set_extra("_livinghello_image_owner", "livinghello")
+        req = SimpleNamespace(extra_user_content_parts=[], image_urls=[])
+
+        reader = guard._understanding()
+        await reader.attach(event, req)
+        await reader.attach(event, req)
+
+        provider.text_chat.assert_awaited_once()
+        self.assertEqual(
+            provider.text_chat.await_args.kwargs["image_urls"], [url])
+        self.assertEqual(req.image_urls, [])
+        self.assertEqual(len(req.extra_user_content_parts), 1)
+        prompt = req.extra_user_content_parts[0].text
+        self.assertIn("LivingHello独立图片理解", prompt)
+        self.assertIn("用户引用了恰比的历史图片消息", prompt)
+        self.assertIn("画面里有三张蓝色风景图", prompt)
+        self.assertNotIn(url, prompt)
+        self.assertNotIn("你在哪儿找的这些图", prompt)
+
+    async def test_congling_plain_quote_does_not_call_vision(self):
+        guard = plugin(gate_config(
+            expression_takeover_enabled=True,
+            understand_image_enabled=True,
+            understand_image_provider_id="own-vision",
+        ))
+        native = SimpleNamespace(enabled_for=lambda event: True)
+        provider = SimpleNamespace(text_chat=AsyncMock())
+        guard.context = SimpleNamespace(
+            get_registered_star=lambda _: SimpleNamespace(
+                activated=True, star_cls=native),
+            get_provider_by_id=Mock(return_value=provider),
+        )
+        event = Event(group="native")
+        event.message_obj.message = [
+            Reply(id="quoted-text", sender_nickname="恰比",
+                  chain=[Plain("只是文字")]),
+        ]
+        event.set_extra("_livinghello_image_owner", "livinghello")
+        req = SimpleNamespace(extra_user_content_parts=[])
+
+        await guard._understanding().attach(event, req)
+
+        provider.text_chat.assert_not_awaited()
+        self.assertEqual(req.extra_user_content_parts, [])
+
+    async def test_image_failure_injects_unresolved_without_url(self):
+        guard = plugin(gate_config(
+            expression_takeover_enabled=True,
+            understand_image_enabled=True,
+            understand_image_provider_id="own-vision",
+        ))
+        native = SimpleNamespace(enabled_for=lambda event: True)
+        provider = SimpleNamespace(
+            get_model=lambda: "qwen3-vl",
+            provider_config={"modalities": ["image"]},
+            text_chat=AsyncMock(side_effect=RuntimeError("failed")),
+        )
+        guard.context = SimpleNamespace(
+            get_registered_star=lambda _: SimpleNamespace(
+                activated=True, star_cls=native),
+            get_provider_by_id=Mock(return_value=provider),
+        )
+        event = Event(group="native")
+        url = "https://example.invalid/private.png"
+        event.message_obj.message = [
+            Reply(id="quoted", sender_nickname="原作者",
+                  chain=[Image(url=url)]),
+        ]
+        event.set_extra("_livinghello_image_owner", "livinghello")
+        req = SimpleNamespace(extra_user_content_parts=[])
+
+        await guard._understanding().attach(event, req)
+
+        prompt = req.extra_user_content_parts[0].text
+        self.assertIn("本轮未能识别，请勿猜测画面或来源", prompt)
+        self.assertNotIn(url, prompt)
+
+    async def test_owned_image_in_earlier_fragment_is_still_understood(self):
+        guard = plugin(gate_config(
+            expression_takeover_enabled=True,
+            understand_image_enabled=True,
+            understand_image_provider_id="own-vision",
+        ))
+        native = SimpleNamespace(enabled_for=lambda event: True)
+        provider = SimpleNamespace(
+            get_model=lambda: "qwen3-vl",
+            provider_config={"modalities": ["image"]},
+            text_chat=AsyncMock(return_value=SimpleNamespace(
+                completion_text="较早分片里的图片")),
+        )
+        guard.context = SimpleNamespace(
+            get_registered_star=lambda _: SimpleNamespace(
+                activated=True, star_cls=native),
+            get_provider_by_id=Mock(return_value=provider),
+        )
+        source = Event(group="native", mid="fragment")
+        source.message_obj.message = [Image(url="fragment.png")]
+        source.set_extra("_livinghello_image_owner", "livinghello")
+        event = Event(group="native", mid="current")
+        event.set_extra("_at_guard_fragment_sources", (source, event))
+        req = SimpleNamespace(extra_user_content_parts=[])
+
+        await guard._understanding().attach(event, req)
+
+        provider.text_chat.assert_awaited_once()
+        self.assertIn("较早分片里的图片", req.extra_user_content_parts[0].text)
 
 
 class HelpTest(unittest.TestCase):

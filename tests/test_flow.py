@@ -5,8 +5,8 @@ from guard_flow import build_flow
 
 
 class FlowTests(unittest.TestCase):
-    def nodes(self, decision):
-        flow=build_flow({"gate_mode":"enforce"}, decision=decision, inputs={"消息":"测试"})
+    def nodes(self, decision, mode="enforce"):
+        flow=build_flow({"gate_mode":mode}, decision=decision, inputs={"消息":"测试"})
         return {n["id"]:n for n in flow["gate"]["nodes"]},flow
 
     def test_rule_short_circuit_does_not_claim_model_executed(self):
@@ -33,3 +33,20 @@ class FlowTests(unittest.TestCase):
         self.assertTrue(all(n["status"]=="planned" for n in flow["generate"]["nodes"]))
         ids={n["id"] for n in flow["gate"]["nodes"]}
         self.assertTrue(all(e["source"] in ids and e["target"] in ids for e in flow["gate"]["edges"]))
+
+    def test_shadow_silent_is_observed_and_generation_stays_planned(self):
+        decision=Decision(
+            reason="model_silent",source="model",action="silence",score=20,
+            chat_data={"observation_rules":["duplicate","cooldown"]})
+        nodes,flow=self.nodes(decision,"shadow")
+        self.assertEqual(flow["mode"]["id"],"shadow")
+        self.assertEqual(nodes["result"]["status"],"observed")
+        self.assertEqual(nodes["result"]["evidence"]["线上处理"],"继续回复（观察模式不拦截）")
+        self.assertEqual(nodes["result"]["evidence"]["观察但未拦截的本地规则"],
+                         ["duplicate","cooldown"])
+        self.assertTrue(all(n["status"]=="planned" for n in flow["generate"]["nodes"]))
+
+    def test_removed_mode_flow_falls_back_to_enforce(self):
+        _,flow=self.nodes(Decision(reason="too_short",source="rule"),"off")
+        self.assertEqual(flow["mode"]["id"],"enforce")
+        self.assertTrue(all(n["status"]=="skipped" for n in flow["generate"]["nodes"]))

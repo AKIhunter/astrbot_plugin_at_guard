@@ -62,7 +62,7 @@ def recall(event, mid="m1", group=None):
 
 class DeliveryTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.guard = plugin(gate_config(gate_mode="off", reply_quote_enabled=False,
+        self.guard = plugin(gate_config(gate_mode="shadow", reply_quote_enabled=False,
                                        reply_mention_enabled=False))
         self.delivery, self.event = self.guard._delivery(), Event()
         self.window(self.event)
@@ -76,7 +76,7 @@ class DeliveryTest(unittest.IsolatedAsyncioTestCase):
         await self.guard.prepare_reply_delivery(self.event)
         await self.guard.recheck_before_send(self.event)
 
-    async def test_off_returns_expression_and_does_not_patch_or_wait(self):
+    async def test_expression_disabled_does_not_patch_or_wait(self):
         original = self.event.send
         await self.delivery.prepare(self.event)
         self.assertEqual(self.event.send, original)

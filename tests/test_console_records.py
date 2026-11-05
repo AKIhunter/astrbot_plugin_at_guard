@@ -17,6 +17,22 @@ from test_multimodal import Provider
 from test_context_policy import output
 
 
+CONGLING_MEMORY = """<!--congling:memory-->
+【长期记忆 · 仅供参考；与当前对话冲突时以当前对话为准】
+你和 TA 现在是「陌生」：还不太熟，说话客气一点
+【记忆结束】"""
+CONGLING_PERCEIVED = """<!--congling:perceived:1012794694-->
+【消息解析补充 · 以下内容由系统自动展开，不是用户原话】
+以下是这个会话里最近的几条消息（转发已展开），只作上下文参考，不是当前用户这一句的内容：
+聪明的帕鲁: 廉颇老矣，尚能饭否
+闲人xh925: 抓紧打影之刃，我都快通关了。
+闲人xh925: 你真的廉颇老矣了，还能打不？
+聪明的帕鲁: 我连着两个晚自习，已经倦了
+鎖鈊嗳╰ァㄊ: [图片：图中是Q版初音未来的表情包，她流着两条蓝色宽泪、半闭着眼，呈现无语流泪的情绪。图中无文字。]从MIKU出生单推至今~
+聪明的帕鲁: 今天健身，准备明天的贡品，直接请假上坟去
+【补充结束】"""
+
+
 class RecordsTest(unittest.TestCase):
     def test_rotation_and_reload_preserve_all_archives(self):
         with TemporaryDirectory() as directory:
@@ -132,6 +148,16 @@ class SaveTest(unittest.TestCase):
         _, result, _ = self.save({"participation_confidence_threshold": 65})
         self.assertNotIn("口径", result["data"]["save_notice"])
 
+    def test_overview_only_returns_ten_recent_decisions(self):
+        guard = plugin(gate_config())
+        for index in range(12):
+            guard.engine.log.add({"gid": "1001", "ts": index})
+        async def providers(*_):
+            return []
+        with patch.object(guard_webui, "_providers", providers):
+            result = asyncio.run(guard_webui._state(guard))
+        self.assertEqual([row["ts"] for row in result["decisions"]], list(range(11, 1, -1)))
+
     def test_unknown_field_cannot_clear_statistics(self):
         guard, result, before = self.save({"reset_stats": True})
         self.assertIn("不允许", result)
@@ -159,6 +185,127 @@ class SaveTest(unittest.TestCase):
             result = asyncio.run(guard_webui.handle_decisions(guard))
         self.assertEqual(result["data"]["query"], "")
         self.assertEqual(len(result["data"]["decisions"]), 1)
+
+
+class DisplayContextTest(unittest.TestCase):
+    @staticmethod
+    def chat(*, recent=None, memory=None):
+        return {
+            "recent_messages_old_to_new": recent or [],
+            "current_message": {
+                "text": "然后你深海少女手办买了吗",
+                "sender_name": "聪明的帕鲁",
+            },
+            "scoped_memory": memory if memory is not None else [
+                CONGLING_MEMORY, CONGLING_PERCEIVED],
+        }
+
+    def test_user_sample_counts_six_perceived_messages_not_long_term_memory(self):
+        chat = guard_webui._display_chat_data(self.chat())
+        self.assertEqual(chat["reference_count"], 6)
+        self.assertEqual(
+            [item["sender_name"] for item in chat["reference_messages_old_to_new"]],
+            ["聪明的帕鲁", "闲人xh925", "闲人xh925", "聪明的帕鲁",
+             "鎖鈊嗳╰ァㄊ", "聪明的帕鲁"],
+        )
+        self.assertEqual(chat["background_memory"], [CONGLING_MEMORY])
+        self.assertNotIn("congling:perceived", "\n".join(chat["background_memory"]))
+
+    def test_local_messages_win_dedup_and_omission_stays_visible_without_counting(self):
+        perceived = """<!--congling:perceived:1-->
+以下是这个会话里最近的几条消息：
+Alice: HELLO &amp;   world
+…（更早的略）
+Bob：第二条: 正文冒号保留
+【补充结束】"""
+        chat = guard_webui._display_chat_data(self.chat(
+            recent=[{"sender_name": "alice", "text": "hello & world"}],
+            memory=[perceived],
+        ))
+        self.assertEqual(chat["reference_count"], 2)
+        self.assertEqual(len(chat["reference_messages_old_to_new"]), 3)
+        self.assertEqual(chat["reference_messages_old_to_new"][0]["source"], "livinghello")
+        self.assertTrue(chat["reference_messages_old_to_new"][1]["is_omission"])
+        self.assertEqual(chat["reference_messages_old_to_new"][2]["text"], "第二条: 正文冒号保留")
+
+    def test_broken_or_unknown_perceived_block_fails_open(self):
+        broken = "<!--congling:perceived:1-->\nAlice: 没有稳定标题"
+        chat = guard_webui._display_chat_data(self.chat(memory=[broken]))
+        self.assertEqual(chat["reference_count"], 0)
+        self.assertEqual(chat["background_memory"], [broken])
+
+    def test_reference_display_is_bounded(self):
+        recent = [
+            {"sender_name": f"user-{index}", "text": "x" * 700}
+            for index in range(35)
+        ]
+        chat = guard_webui._display_chat_data(self.chat(recent=recent, memory=[]))
+        self.assertEqual(chat["reference_count"], 30)
+        self.assertEqual(len(chat["reference_messages_old_to_new"]), 30)
+        self.assertTrue(all(
+            len(item["text"]) == 600
+            for item in chat["reference_messages_old_to_new"]
+        ))
+
+    def test_state_and_search_apply_the_same_legacy_record_enhancement(self):
+        guard = plugin(gate_config())
+        guard.engine.log.add({"gid": "1001", "ts": 1, "chat_data": self.chat()})
+
+        async def providers(*_):
+            return []
+
+        with patch.object(guard_webui, "_providers", providers):
+            state = asyncio.run(guard_webui._state(guard))
+        with patch.object(guard_webui.request, "query", {"query": "1001"}, create=True):
+            search = asyncio.run(guard_webui.handle_decisions(guard))["data"]
+        state_chat = state["decisions"][0]["chat_data"]
+        search_chat = search["decisions"][0]["chat_data"]
+        self.assertEqual(state_chat["reference_count"], 6)
+        self.assertEqual(search_chat["reference_count"], 6)
+        self.assertEqual(
+            state_chat["reference_messages_old_to_new"],
+            search_chat["reference_messages_old_to_new"],
+        )
+
+
+class ConsolePageContractTest(unittest.TestCase):
+    def test_recent_decision_table_uses_conversation_id_and_historical_threshold(self):
+        page = (Path(__file__).resolve().parents[1] / "pages/guard/index.html").read_text()
+        self.assertIn(
+            "<tr><th>对话ID</th><th>request_id</th><th>文字判断结果</th>"
+            "<th>总耗时</th><th>参与适合度</th><th>判断结果</th><th>查看详情</th></tr>",
+            page,
+        )
+        self.assertEqual(page.count('colspan="7"'), 2)
+        self.assertIn("/:(?:GroupMessage|group):(\\d+)$/i", page)
+        self.assertIn('const threshold=hasThreshold?Number(row.th):null;', page)
+        self.assertIn("const passed=score>=threshold;", page)
+        self.assertIn(".decision-score.pass", page)
+        self.assertIn(".decision-score.fail", page)
+        self.assertIn(".decision-score.missing", page)
+        summary = page[
+            page.index("function textDecisionSummary"):
+            page.index("function decisionDuration")
+        ]
+        self.assertNotIn("建议参与", summary)
+        self.assertNotIn("建议静默", summary)
+
+    def test_console_exposes_only_two_modes_and_explains_observation_flow(self):
+        page = (Path(__file__).resolve().parents[1] / "pages/guard/index.html").read_text()
+        self.assertIn('["enforce", "shadow"].forEach((mode)', page)
+        mode_block = page[
+            page.index("const MODE_HINT"):
+            page.index("const STATUS_LABEL")
+        ]
+        self.assertNotIn("legacy:", mode_block)
+        self.assertNotIn("off:", mode_block)
+        self.assertIn('observed:"仅记录"', page)
+        self.assertIn('id="flowModeSummary"', page)
+        self.assertIn("<span>线上处理 <b>", page)
+        self.assertIn("继续回复（观察模式不拦截）", page)
+        for removed in ("legacy", "off"):
+            with self.assertRaises(ValueError):
+                guard_webui._coerce("gate_mode", removed)
 
 
 class TimingTest(unittest.TestCase):

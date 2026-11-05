@@ -8,6 +8,7 @@
 | 查默认值、原生字段、保存目标和生效范围 | [配置参考](configuration.md) |
 | 配置文生图、图生图和每日共享次数 | [生图操作](usage.md#配置独立ai生图)及[生图参数](configuration.md#独立ai生图) |
 | 只按流水条数、关闭时间过滤 | [上下文设置](usage.md#只限制流水条数) |
+| 单独理解接话判断、评分、否决、阈值和图片补证 | [判断逻辑说明](decision-logic.md) |
 | 看完整判定/生成图、缓存、撤回窗口和配套约定 | [流程与集成说明](architecture.md) |
 | 修改代码、执行离线回归、检查发布包或维护记录 | [开发与维护](development.md) |
 | 看版本变化 | [更新日志](../CHANGELOG.md) |
@@ -25,6 +26,7 @@
 | [使用](usage.md) | how-to | 控制台修改者 | pages/guard、原生桥与发送逻辑 | 2026-11-04 | 每次 UI 或行为变更；90 天复核 | 控件、保存流程或失败原因改变 |
 | [配置](configuration.md) | reference | schema / 原生桥修改者 | _conf_schema、guard_native_*、guard_image_settings.DEFAULTS | 2026-11-04 | 每次字段变更；每个文档 PR 自动校验 | 字段/默认值不匹配或宿主接口变化 |
 | [流程](architecture.md) | explanation | 判定/发送/配套修改者 | main、guard_engine、guard_* 及配套源码约定 | 2026-11-04 | 每次链路或配套变更；90 天复核 | 钩子、缓存、撤回或计时约定改变 |
+| [判断逻辑](decision-logic.md) | explanation | 判定与输入理解修改者 | main、guard_engine、guard_understanding | 2026-11-05 | 每次判断协议、模式或图片理解变更 | 评分字段、否决原因、阈值或所有权改变 |
 | [维护](development.md) | how-to / operational | 测试与发布维护者 | tests、runner、日志实现、CI、归档属性 | 2026-11-04 | 每次发布；故障后复核 | 命令不可执行、指标/恢复规则改变 |
 | [更新日志](../CHANGELOG.md) | reference | 发布维护者 | 对应版本提交与源码 | 2026-11-04 | 每次版本发布 | metadata 新版本没有记录 |
 | [历史说明](history/README.md) | reference / archived | 历史档案维护者 | migration-manifest.json | 2026-11-04 | 档案路径或解释变更时 | 被引用为当前源码哈希 |

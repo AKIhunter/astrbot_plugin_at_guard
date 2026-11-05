@@ -1,4 +1,4 @@
-"""原生模型/人格的范围隔离、故障恢复及热重载回归。"""
+"""原生模型/人格/语音的范围隔离、故障恢复及热重载回归。"""
 import asyncio
 import copy
 import json
@@ -37,6 +37,8 @@ class NativeSettingsTests(unittest.IsolatedAsyncioTestCase):
                 persona=dict(persona_id="persona-a")))
             conf["provider_settings"] = dict(streaming_response=False,
                 default_image_caption_provider_id="", image_caption_prompt="描述画面")
+            conf["provider_tts_settings"] = dict(enable=False, provider_id="tts-a",
+                dual_output=False, use_file_service=False, trigger_probability=0.5)
             conf.update(t2i=False, t2i_word_threshold=150, t2i_strategy="remote",
                         t2i_endpoint="", t2i_active_template="base")
             conf.config_path = str(Path(self.folder.name) / (key + ".json"))
@@ -50,10 +52,33 @@ class NativeSettingsTests(unittest.IsolatedAsyncioTestCase):
         self.settings = NativeSettings(self.plugin, self.bridge)
         self.settings.install()
         self.providers = [dict(id="chat-a", role="chat", kind="provider", supports_images=False),
-                          dict(id="chat-b", role="chat", kind="provider", supports_images=True)]
+                          dict(id="chat-b", role="chat", kind="provider", supports_images=True),
+                          dict(id="tts-a", role="tts", kind="provider"),
+                          dict(id="tts-b", role="tts", kind="provider")]
 
     def settings_body(self, config_id="default", **patch):
         return dict(config_id=config_id, expected_revision=self.settings.read(config_id)["revision"], values=patch)
+
+    async def test_selected_profile_persists_without_changing_persona_or_model(self):
+        before = {key: copy.deepcopy(dict(conf)) for key, conf in self.mgr.confs.items()}
+        await self.settings.select_profile({"config_id": "other"})
+        replacement = NativeSettings(self.plugin, self.bridge)
+        self.assertEqual(replacement.selected_profile(), {"config_id": "other", "saved": True})
+        self.assertEqual(before, {key: dict(conf) for key, conf in self.mgr.confs.items()})
+        self.assertEqual(replacement.pins, {})
+        with self.assertRaises(NativeReplyError):
+            await replacement.select_profile({"config_id": "missing"})
+        self.assertEqual(replacement.selected_profile()["config_id"], "other")
+        del self.mgr.confs["other"]
+        with self.assertRaisesRegex(NativeReplyError, "不存在"):
+            replacement.selected_profile()
+
+    async def test_registered_router_upstream_can_be_native_main_and_fallback(self):
+        self.providers.append(dict(id="router:upstream_2", role="chat", kind="router_upstream"))
+        result = await self.settings.save(self.request, self.settings_body(
+            provider_id="router:upstream_2", fallback_provider_ids=["router:upstream_2"]), self.providers)
+        self.assertEqual(result["values"]["provider_id"], "router:upstream_2")
+        self.assertEqual(result["values"]["fallback_provider_ids"], ["router:upstream_2"])
 
     async def resolve(self, umo="default"):
         return await self.persona_mgr.resolve_selected_persona(
@@ -67,6 +92,28 @@ class NativeSettingsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.conf["agent_runner"]["config"]["model"]["provider_id"], "chat-a")
         self.assertNotIn("wake_prefix", json.loads(Path(self.other.config_path).read_text(encoding="utf-8-sig")))
         self.assertEqual(self.other["unrelated"], {"preserve": True})
+
+    async def test_voice_settings_roundtrip_only_target_and_preserve_tts_siblings(self):
+        result = await self.settings.save(self.request, self.settings_body(
+            "other", tts_enabled=True, tts_provider_id="tts-b"), self.providers)
+        self.assertTrue(result["values"]["tts_enabled"])
+        self.assertEqual(result["values"]["tts_provider_id"], "tts-b")
+        self.assertFalse(self.conf["provider_tts_settings"]["enable"])
+        self.assertEqual(self.conf["provider_tts_settings"]["provider_id"], "tts-a")
+        self.assertEqual(self.other["provider_tts_settings"]["trigger_probability"], 0.5)
+        self.assertFalse(self.other["provider_tts_settings"]["dual_output"])
+        disk = json.loads(Path(self.other.config_path).read_text(encoding="utf-8-sig"))
+        self.assertEqual(disk["provider_tts_settings"], self.other["provider_tts_settings"])
+
+    async def test_native_voice_change_is_visible_and_old_revision_conflicts(self):
+        stale = self.settings_body(tts_enabled=True, tts_provider_id="tts-b")
+        self.conf["provider_tts_settings"].update(enable=True, provider_id="tts-b")
+        self.conf.save_config()
+        self.assertTrue(self.settings.read()["values"]["tts_enabled"])
+        self.assertEqual(self.settings.read()["values"]["tts_provider_id"], "tts-b")
+        with self.assertRaises(NativeReplyError) as error:
+            await self.settings.save(self.request, stale, self.providers)
+        self.assertEqual(error.exception.status, 409)
 
     async def test_fixed_persona_overrides_old_conversation_and_survives_reload(self):
         await self.settings.save(self.request,self.settings_body(persona_id="persona-b"),self.providers)
@@ -125,6 +172,8 @@ class NativeSettingsTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(NativeReplyError):
             await self.settings.save(self.request,stale,self.providers)
         for patch in [dict(provider_id="chat-a::virtual"),dict(persona_id="unknown"),
+                      dict(tts_enabled=1),dict(tts_provider_id="chat-a"),
+                      dict(tts_provider_id="missing"),
                       dict(request_max_retries=True),dict(request_max_retries=0),
                       dict(IMAGE_GEN_API_KEY="secret")]:
             with self.assertRaises(NativeReplyError):
@@ -133,9 +182,15 @@ class NativeSettingsTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_disabled_external_runner_cannot_change_hidden_model_fields(self):
         self.conf["agent_runner"]["runner_type"]="external"
-        self.assertNotIn("provider_id",self.settings.read()["values"])
+        values = self.settings.read()["values"]
+        self.assertNotIn("provider_id", values)
+        self.assertIn("tts_enabled", values)
+        self.assertIn("tts_provider_id", values)
         with self.assertRaises(NativeReplyError):
             await self.settings.save(self.request,self.settings_body(provider_id="chat-b"),self.providers)
+        saved = await self.settings.save(
+            self.request, self.settings_body(tts_enabled=True, tts_provider_id="tts-b"), self.providers)
+        self.assertTrue(saved["values"]["tts_enabled"])
 
     async def test_shared_save_lock_and_stale_concurrent_writer(self):
         self.assertIs(self.settings.lock,self.bridge.lock)
@@ -151,6 +206,29 @@ class NativeSettingsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("secret-marker",payload)
         self.assertNotIn("system_prompt",payload)
         self.assertNotIn("unrelated",payload)
+
+    async def test_voice_refresh_failure_restores_enable_model_and_disk(self):
+        self.reload.side_effect = [OSError("refresh failed"), None]
+        with self.assertRaisesRegex(NativeReplyError, "已恢复"):
+            await self.settings.save(self.request, self.settings_body(
+                tts_enabled=True, tts_provider_id="tts-b"), self.providers)
+        self.assertFalse(self.settings.read()["values"]["tts_enabled"])
+        self.assertEqual(self.settings.read()["values"]["tts_provider_id"], "tts-a")
+        disk = json.loads(Path(self.conf.config_path).read_text(encoding="utf-8-sig"))
+        self.assertFalse(disk["provider_tts_settings"]["enable"])
+        self.assertEqual(disk["provider_tts_settings"]["provider_id"], "tts-a")
+        self.assertEqual(disk["provider_tts_settings"]["trigger_probability"], 0.5)
+
+    async def test_missing_voice_paths_are_hidden_and_cannot_be_created(self):
+        del self.conf["provider_tts_settings"]
+        self.conf.save_config()
+        current = self.settings.read()
+        self.assertNotIn("tts_enabled", current["values"])
+        self.assertNotIn("tts_provider_id", current["values"])
+        with self.assertRaises(NativeReplyError):
+            await self.settings.save(self.request, {
+                "config_id": "default", "expected_revision": current["revision"],
+                "values": {"tts_enabled": True}}, self.providers)
 
     async def test_removed_native_vision_fields_are_rejected_and_preserved_on_disk(self):
         before=Path(self.conf.config_path).read_bytes()

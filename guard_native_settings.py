@@ -1,4 +1,4 @@
-"""LivingHello原生模型/人格桥：只合并公开字段，不落盘运行时临时配置。"""
+"""LivingHello原生模型/人格/语音桥：只合并公开字段，不落盘运行时临时配置。"""
 from __future__ import annotations
 
 import copy
@@ -22,7 +22,11 @@ FIELDS = {
                            "一次模型请求的尝试上限，重复尝试可能增加等待和费用。允许1至10。"),
     "streaming_response": ("provider_settings.streaming_response", "模型", "流式回复", "bool",
                           "沿用AstrBot流式发送机制。与多消息分段同时开启时，请以原生流水线的实际行为为准。"),
-    "persona_id": ("agent_runner.config.persona.persona_id", "人格", "原生人格（保存后固定）", "persona",
+    "tts_enabled": ("provider_tts_settings.enable", "语音回复", "使用语音回复", "bool",
+                    "同步所选AstrBot原生配置的语音回复开关。实际转换还需要有效TTS模型、会话允许且触发概率通过。"),
+    "tts_provider_id": ("provider_tts_settings.provider_id", "语音回复", "默认 TTS 模型", "tts",
+                       "同步所选AstrBot原生配置的默认文本转语音模型。留空时可由会话单独选择。"),
+    "persona_id": ("agent_runner.config.persona.persona_id", "人格", "人格（保存后固定）", "persona",
                    "手动选择并保存后固定此配置的人格，覆盖会话旧人格和从绫人格选择；不会因刷新或试跑自动换人。"),
     "t2i": ("t2i", "文本排版转图", "启用文本排版转图", "bool",
             "把回复文字排版成图片，适合长回复；不是AI文生图。"),
@@ -60,6 +64,7 @@ class NativeSettings(NativeReply):
         self.plugin = plugin
         self.lock = native_reply.lock  # 分段和模型保存共用一把锁，避免同配置相互覆盖。
         self.pin_path = Path(plugin.data_dir) / "native_persona_pins.json" if plugin.data_dir else None
+        self.profile_path = Path(plugin.data_dir) / "native_selected_profile.json" if plugin.data_dir else None
         self.pins = {}
         self.pin_error = False
         if self.pin_path and self.pin_path.exists():
@@ -74,6 +79,41 @@ class NativeSettings(NativeReply):
                 plugin.logger.error("[LivingHello] 固定人格文件损坏，禁止自动回退人格，请恢复备份")
         self._wrapper = None
         self._original = None
+
+    def selected_profile(self):
+        config_id = "default"
+        if self.profile_path and self.profile_path.exists():
+            try:
+                config_id = json.loads(self.profile_path.read_text(encoding="utf-8"))["config_id"]
+                if not isinstance(config_id, str):
+                    raise ValueError("invalid profile")
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                raise NativeReplyError("控制台配置选择记录不可读，请恢复备份", 503) from exc
+        # 已删除的配置明确提示，不能悄悄把后续修改写到default。
+        if config_id not in self.manager().confs:
+            raise NativeReplyError("上次选择的AstrBot配置已不存在，请手动选择配置", 404)
+        return {"config_id": config_id, "saved": bool(self.profile_path and self.profile_path.exists())}
+
+    async def select_profile(self, body):
+        if not isinstance(body, dict) or set(body) != {"config_id"} or not isinstance(body["config_id"], str):
+            raise NativeReplyError("原生配置选择格式无效")
+        async with self.lock:
+            self.read(body["config_id"])
+            if not self.profile_path:
+                raise NativeReplyError("控制台配置选择目录不可用", 503)
+            fd, temporary = tempfile.mkstemp(prefix=".native-profile-", dir=self.profile_path.parent)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    json.dump(body, stream, ensure_ascii=False)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, self.profile_path)
+            except OSError as exc:
+                raise NativeReplyError("配置选择保存失败，请重试", 500) from exc
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+            return body
 
     def personas(self):
         manager = getattr(self.context, "persona_manager", None)
@@ -152,8 +192,9 @@ class NativeSettings(NativeReply):
 
     def validate(self, patch, current, providers):
         if not isinstance(patch, dict) or not patch or set(patch) - set(current["values"]):
-            raise NativeReplyError("只能保存当前宿主支持的原生模型、人格及图片字段")
-        chat = {p["id"] for p in providers if p.get("role") == "chat" and p.get("kind") != "router_upstream"}
+            raise NativeReplyError("只能保存当前宿主支持的原生模型、人格、语音及排版字段")
+        chat = {p["id"] for p in providers if p.get("role") == "chat" and "::" not in p["id"]}
+        tts = {p["id"] for p in providers if p.get("role") == "tts"}
         vision = {p["id"] for p in providers if p.get("role") == "chat" and
                   p.get("supports_images") and p.get("kind") != "router_upstream"}
         personas = {p["id"] for p in current["personas"]} | {"[%None]"}
@@ -170,9 +211,10 @@ class NativeSettings(NativeReply):
                          all(isinstance(v, str) and v in chat for v in value) and len(set(value)) == len(value))
             else:
                 valid = isinstance(value, str) and len(value) <= (8000 if kind == "text" else 2000)
-                if valid and kind in {"provider", "vision", "persona", "strategy"}:
+                if valid and kind in {"provider", "vision", "tts", "persona", "strategy"}:
                     options = {"provider": chat | {""}, "vision": vision | {""},
-                               "persona": personas, "strategy": {"local", "remote"}}[kind]
+                               "tts": tts | {""}, "persona": personas,
+                               "strategy": {"local", "remote"}}[kind]
                     valid = value in options
             if not valid:
                 raise NativeReplyError(f"{FIELDS[key][2]}的值无效，请检查范围或可用选项")

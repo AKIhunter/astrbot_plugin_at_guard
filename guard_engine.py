@@ -21,7 +21,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-GATE_MODES = ("enforce", "shadow", "legacy", "off")
+GATE_MODES = ("enforce", "shadow")
 DEFAULT_MODE = "enforce"
 DEFAULT_THRESHOLD = 65
 POLICY_VERSION = "participation-v5-image-cache"
@@ -822,6 +822,7 @@ class GateEngine:
         mode: str,
         generation_skipped: bool,
         model: str = "",
+        identity: dict | None = None,
     ) -> None:
         self.log.add(
             {
@@ -858,6 +859,8 @@ class GateEngine:
                 "image_cache_hits": decision.image_cache_hits,
                 "available_image_count": decision.available_image_count,
                 **decision_identity({"gid": group_key, "chat_data": decision.chat_data}),
+                **{key: value for key, value in (identity or {}).items()
+                   if key in {"request_id", "message_id"}},
             }
         )
 
@@ -944,8 +947,11 @@ class GateEngine:
         if not model:
             getter = getattr(provider, "get_model", None)
             model = str(getter() or "") if callable(getter) else ""
-        provider_id = str((getattr(provider, "provider_config", {}) or {}).get("id", ""))
-        target = GateProvider(provider, model, self.provider_label() or
+        provider_config = getattr(provider, "provider_config", {}) or {}
+        provider_id = str(provider_config.get("id", ""))
+        if not model:
+            model = str(provider_config.get("model", "") or "").strip()
+        target = GateProvider(provider, model, model or self.provider_label() or
                               (f"{provider_id}::{model}" if provider_id or model else ""))
         attempts: list[dict[str, Any]] = []
         images: list[dict[str, str]] = []

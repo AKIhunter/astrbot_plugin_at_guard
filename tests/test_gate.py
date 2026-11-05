@@ -4,6 +4,7 @@ import time
 from collections import defaultdict, deque
 from types import SimpleNamespace
 
+from astrbot.api.message_components import At
 from astrbot.core.platform.message_type import MessageType
 
 from guard_engine import GateEngine, normalize_text, parse_gate_response
@@ -248,8 +249,15 @@ class StrictGateTest(unittest.TestCase):
         self.assertEqual(global_config["wake_prefix"].count("龙"), 1)
         self.assertEqual(global_config["wake_prefix"].count("龙，"), 1)
 
-    def test_off_mode_skips_wake_prefix_registration(self):
-        instance = plugin(gate_config(gate_mode="off"))
+    def test_removed_mode_migrates_to_enforce_and_registers_wake_prefix(self):
+        class Config(dict):
+            saves = 0
+
+            def save_config(self):
+                self.saves += 1
+
+        config = Config(gate_config(gate_mode="off"))
+        instance = plugin(config)
         global_config = {"wake_prefix": []}
 
         class Context:
@@ -261,7 +269,22 @@ class StrictGateTest(unittest.TestCase):
 
         asyncio.run(instance.initialize())
 
-        self.assertEqual(global_config["wake_prefix"], [])
+        self.assertEqual(config["gate_mode"], "enforce")
+        self.assertEqual(config.saves, 1)
+        self.assertIn("龙", global_config["wake_prefix"])
+
+    def test_removed_mode_save_failure_still_uses_enforce(self):
+        class Config(dict):
+            def save_config(self):
+                raise OSError("disk error")
+
+        config = Config(gate_config(gate_mode="legacy"))
+        instance = plugin(config)
+
+        instance._normalize_gate_mode()
+
+        self.assertEqual(config["gate_mode"], "enforce")
+        self.assertEqual(instance.engine.mode(), "enforce")
 
     def test_empty_mention_persona_mode_uses_llm(self):
         instance = plugin({"empty_mention_mode": "persona"})
@@ -274,7 +297,7 @@ class StrictGateTest(unittest.TestCase):
         self.assertTrue(event.extra["_at_guard_empty_mention_persona"])
         self.assertTrue(event.stopped)
 
-    def test_legacy_strict_gate_still_clears_late_response(self):
+    def test_removed_strict_gate_flag_no_longer_clears_late_response(self):
         instance = plugin()
         event = FakeEvent()
         event.extra["_at_guard_confidence_score"] = 55
@@ -283,8 +306,8 @@ class StrictGateTest(unittest.TestCase):
         asyncio.run(instance.suppress_no_reply_and_track(event, response))
 
         self.assertFalse(event.stopped)
-        self.assertEqual(response.completion_text, "")
-        self.assertFalse(instance.participation_stats["last"]["allowed"])
+        self.assertEqual(response.completion_text, "我也说两句")
+        self.assertEqual(instance.participation_stats["total"], 0)
 
     def test_private_is_skipped_by_default(self):
         instance = plugin()
@@ -380,24 +403,53 @@ class HardGateTest(unittest.TestCase):
         self.assertEqual(instance.engine.stats["timeouts"], 1)
 
     def test_shadow_mode_never_blocks(self):
-        provider = FakeProvider('{"act":"silent","conf":5,"ground":"none"}')
+        provider = FakeProvider(
+            '{"act":"silent","conf":5,"understood":true,'
+            '"reason":"model_silent","ground":"none"}'
+        )
         instance, event, req = self._ready("随便说一句", provider, gate_mode="shadow")
 
         asyncio.run(instance.guard_llm_request(event, req))
 
         self.assertFalse(event.stopped)
+        self.assertEqual(provider.calls, 1)
         self.assertFalse(event.get_extra("_at_guard_strict_gate", False))
         self.assertEqual(instance.engine.stats["silenced"], 1)
+        self.assertNotIn("1001", instance.proactive_inflight_until)
+        row = instance.engine.log.recent(1)[0]
+        self.assertEqual((row["mode"], row["action"]), ("shadow", "silence"))
+        self.assertTrue(row["chat_data"]["observation_mode"])
 
-    def test_off_mode_calls_no_model(self):
-        provider = FakeProvider('{"act":"reply","conf":90,"ground":"none"}')
-        instance, event, req = self._ready("完全不该判定", provider, gate_mode="off")
+    def test_shadow_mode_records_local_rules_without_blocking(self):
+        output = ('{"act":"silent","conf":5,"understood":true,'
+                  '"reason":"model_silent","ground":"none"}')
+        cases = ("mentions_other", "duplicate", "cooldown", "inflight")
+        for reason in cases:
+            with self.subTest(reason=reason):
+                overrides = {"gate_mode": "shadow"}
+                if reason == "duplicate":
+                    overrides["duplicate_window_seconds"] = 60
+                if reason == "cooldown":
+                    overrides["proactive_cooldown_seconds"] = 60
+                provider = FakeProvider(output)
+                instance, event, req = self._ready("旁路观察这句话", provider, **overrides)
+                if reason == "mentions_other":
+                    event._mentions = [At(qq="other")]
+                elif reason == "duplicate":
+                    key = instance._fingerprint(event.message_str)
+                    instance.replied_fingerprints[("1001", key)] = time.monotonic()
+                elif reason == "cooldown":
+                    instance.last_proactive_reply["1001"] = time.monotonic()
+                else:
+                    instance.proactive_inflight_until["1001"] = time.monotonic() + 30
 
-        asyncio.run(instance.guard_llm_request(event, req))
+                asyncio.run(instance.guard_llm_request(event, req))
 
-        self.assertEqual(provider.calls, 0)
-        self.assertFalse(event.stopped)
-        self.assertEqual(instance.engine.stats["judged"], 0)
+                self.assertFalse(event.stopped)
+                self.assertEqual(provider.calls, 1)
+                self.assertIn(reason, event.get_extra("_at_guard_observation_rules"))
+                row = instance.engine.log.recent(1)[0]
+                self.assertIn(reason, row["chat_data"]["observation_rules"])
 
     def test_short_message_is_silenced_without_model(self):
         provider = FakeProvider('{"act":"reply","conf":90,"ground":"none"}')
@@ -474,8 +526,10 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(normalize_text("【图片】那个  啥时候开服？？"), "那个 什么时候开服??")
 
     def test_mode_falls_back_to_default(self):
-        engine = GateEngine({"gate_mode": "bogus"}, None, SimpleNamespace(debug=lambda *a, **k: None))
-        self.assertEqual(engine.mode(), "enforce")
+        for value in ("legacy", "off", "bogus", ""):
+            with self.subTest(value=value):
+                engine = GateEngine({"gate_mode": value}, None, SimpleNamespace(debug=lambda *a, **k: None))
+                self.assertEqual(engine.mode(), "enforce")
 
 
 class ScoreDistributionTest(unittest.TestCase):

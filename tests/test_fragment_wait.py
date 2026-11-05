@@ -442,8 +442,8 @@ class PipelineTest(unittest.IsolatedAsyncioTestCase):
         await self.judge(event)
         self.assertEqual(len(self.provider.prompts), 1)
 
-    async def test_private_wait_can_work_with_group_gate_off(self):
-        self.guard.config.update(gate_mode="off", fragment_wait_private=True)
+    async def test_private_wait_is_independent_from_shadow_participation(self):
+        self.guard.config.update(gate_mode="shadow", fragment_wait_private=True)
         event = await self.incoming(FragmentEvent(group=""))
         await self.finish(event)
         req = await self.judge(event)

@@ -60,6 +60,45 @@ class ImageGenerationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.service.connection({**self.service.values,
             "provider_id":"router:upstream_2"})[2],"image-one")
 
+    async def test_typed_image_router_outside_chat_registry_can_save_and_reload(self):
+        config = dict(enabled=True, provider_id="typed-router",
+                      upstream_7=dict(api_type="image_generation", name="专用生图API",
+                                      api_base="https://images.invalid/v1", api_key="typed-secret",
+                                      model="image-seven", route_enabled=False),
+                      upstream_8=dict(api_type="embedding", name="向量API",
+                                      api_base="https://embedding.invalid/v1", api_key="embedding-secret",
+                                      model="embedding-eight"))
+        self.context.get_registered_star = lambda name: SimpleNamespace(
+            activated=True, star_cls=SimpleNamespace(config=config)) if name == "astrbot_plugin_multi_api_router" else None
+        self.context.get_all_providers = lambda: [self.native]  # 生图上游没有聊天Provider。
+        result = await self.service.save(self.body(provider_id="typed-router:upstream_7"))
+        row = next(p for p in result["providers"] if p["id"] == "typed-router:upstream_7")
+        self.assertEqual((row["display"], row["model"]), ("专用生图API", "image-seven"))
+        self.assertNotIn("typed-router:upstream_8", {p["id"] for p in result["providers"]})
+        self.assertNotIn("typed-secret", json.dumps(result))
+        self.assertEqual(self.service.connection(self.service.values),
+                         ("https://images.invalid/v1", "typed-secret", "image-seven"))
+        replacement = ImageSettings(self.plugin)
+        self.assertEqual(replacement.values["provider_id"], "typed-router:upstream_7")
+        config["enabled"] = False
+        with self.assertRaises(NativeReplyError):
+            replacement.connection(replacement.values)
+
+    async def test_existing_custom_size_and_extended_timeout_survive_reload(self):
+        await self.service.save(self.body(size="2048x2048", timeout_seconds=240))
+        replacement = ImageSettings(self.plugin)
+        self.assertFalse(replacement.error)
+        self.assertEqual(replacement.values["size"], "2048x2048")
+        self.assertEqual(replacement.values["timeout_seconds"], 240)
+        for patch in (dict(size="2049x2048"), dict(size="511x1024"), dict(timeout_seconds=501)):
+            with self.assertRaises(NativeReplyError):
+                await self.service.save(self.body(**patch))
+
+    def test_dashscope_image_response_is_preserved(self):
+        self.assertEqual(ImageSettings.extract({"output": {"choices": [{"message": {
+            "content": [{"type": "image", "image": "https://example.invalid/image.png"}]}}]}}),
+            "https://example.invalid/image.png")
+
     async def test_atomic_save_reload_and_stale_revision(self):
         before=self.service.read()["revision"]
         await self.service.save(self.body(model="image-two",daily_limit=10))
@@ -195,17 +234,24 @@ class ImageHttpTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         from aiohttp import web
         self.received=[]
+        self.http_status = 200
+        self.response_payload = None
         async def handler(request):
             if request.content_type=="multipart/form-data":
                 form=await request.post()
                 self.received.append((request.path,dict(model=form["model"],n=form["n"],
                                                       image=form["image"].file.read())))
             else:self.received.append((request.path,await request.json()))
-            return web.json_response({"data":[{"b64_json":base64.b64encode(self.output.read_bytes()).decode()}]})
+            return web.json_response(self.response_payload or
+                {"data":[{"b64_json":base64.b64encode(self.output.read_bytes()).decode()}]},
+                status=self.http_status)
         app=web.Application()
         app.router.add_post("/v1/images/generations",handler)
         app.router.add_post("/v1/images/edits",handler)
         app.router.add_post("/v1/chat/completions",handler)
+        async def download(request):
+            return web.Response(status=503)
+        app.router.add_get("/image.png", download)
         self.runner=web.AppRunner(app)
         await self.runner.setup()
         site=web.TCPSite(self.runner,"127.0.0.1",0)
@@ -228,3 +274,49 @@ class ImageHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.received[0][1]["n"],1)
         self.assertEqual(self.received[1][1]["image"],self.output.read_bytes())
         self.assertEqual(self.received[2][1]["modalities"],["image"])
+
+    async def test_trace_counts_real_http_api_and_successful_image_delivery(self):
+        from guard_request_trace import RequestTrace, ID_KEY
+        trace = RequestTrace(self.plugin, self.plugin.data_dir)
+        event = Event()
+        trace.begin(event)
+        self.service.connection = lambda values: (self.base, "fixture-key", "image-model")
+        self.service._request = lambda *args: ImageSettings._request(self.service, *args)
+        try:
+            result = await self.service.generate(event, "仅本地HTTP生图")
+            row = await trace.get(event.get_extra(ID_KEY))
+            self.assertIn("图片已发送", result)
+            self.assertEqual(row["summary"]["image_api_calls"], 1)
+            self.assertEqual(row["summary"]["tool_calls"], 1)
+            self.assertEqual(row["features"]["image_api"]["status"], "success")
+            self.assertEqual(row["features"]["image_delivery"]["status"], "success")
+            self.assertEqual(len(self.received), 1)
+        finally:
+            await trace.close()
+
+    async def test_trace_distinguishes_http_failure_from_download_failure(self):
+        from guard_request_trace import RequestTrace, ID_KEY
+        trace = RequestTrace(self.plugin, self.plugin.data_dir)
+        self.service.connection = lambda values: (self.base, "fixture-key", "image-model")
+        self.service._request = lambda *args: ImageSettings._request(self.service, *args)
+        try:
+            self.http_status = 503
+            first = Event(mid="http-failure")
+            trace.begin(first)
+            await self.service.generate(first, "API失败")
+            row = await trace.get(first.get_extra(ID_KEY))
+            self.assertEqual(row["features"]["image_api"]["status"], "failed")
+            self.assertEqual(row["summary"]["image_api_calls"], 1)
+            self.http_status = 200
+            self.response_payload = {"data": [{"url": self.base.removesuffix("/v1") + "/image.png"}]}
+            second = Event(mid="download-failure")
+            trace.begin(second)
+            await self.service.generate(second, "下载失败")
+            row = await trace.get(second.get_extra(ID_KEY))
+            self.assertEqual(row["features"]["image_api"]["status"], "success")
+            self.assertEqual(row["features"]["image_download"]["status"], "failed")
+            self.assertEqual(row["summary"]["image_api_calls"], 1)
+            self.assertNotIn("image_delivery", row["features"])
+            self.assertEqual(self.service.used(), 2)
+        finally:
+            await trace.close()

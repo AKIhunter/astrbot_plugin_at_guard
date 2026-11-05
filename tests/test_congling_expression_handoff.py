@@ -134,6 +134,26 @@ class HandoffTests(unittest.IsolatedAsyncioTestCase):
         service._enrich_with_timeout.assert_awaited_once()
         self.assertIs(service.plugin._current_event, event)
 
+    async def test_livinghello_image_owner_only_skips_congling_images(self):
+        actual, service = self.service()
+        event = Event()
+        event.extra["_livinghello_image_owner"] = "livinghello"
+
+        perceived = await actual.perceive(service, event)
+
+        service._enrich_with_timeout.assert_awaited_once_with(
+            perceived, skip_images=True)
+        self.assertEqual(perceived.text, "原始文字")
+
+    async def test_without_image_owner_congling_keeps_existing_media_path(self):
+        actual, service = self.service()
+        event = Event()
+
+        perceived = await actual.perceive(service, event)
+
+        service._enrich_with_timeout.assert_awaited_once_with(
+            perceived, skip_images=False)
+
     def expression(self):
         actual = methods("main.py", ("express_hook",))
         plugin = SimpleNamespace(

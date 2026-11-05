@@ -79,7 +79,19 @@ git archive --format=zip HEAD -o /tmp/livinghello-release.zip
 
 `DecisionLog` 在 `decisions.jsonl` 超过 1 MiB 时轮转到时间戳归档，不覆盖已有归档；兼容旧 `.1`。启动倒序扫描多个文件，分块读取恢复最近 600 条有效 JSON，忽略坏行。默认/搜索最多返回 100 条，不承诺全历史搜索。退出或热重载强制保存当日计数，避免写盘节流遗漏最后计数。
 
+参与模式只接受 `enforce` 与 `shadow`。硬闸门用判断结论控制生成；观察模式同步判断并记录，但参与相关本地规则和模型结论只写入诊断，不停止主回复。初始化遇到旧 `legacy/off` 或未知值时统一保存为 `enforce`；迁移保存失败不能阻断加载，运行时仍须 fail-closed。流程回归应同时核对判断结论与线上处理，不能把观察模式的“判断静默”写成“线上停止生成”。
+
 新记录含完整会话类型、群 ID 或私聊对象；旧私聊从会话标识恢复，群发送者不当作私聊对象。正文在页面按文本输出。普通保存不清零；独立清零操作须确认并保留日志。
+
+`guard_webui._decision_rows()` 是最近记录的统一只读展示入口：先关联请求追踪，再增强 `chat_data`。`console/state` 与 `console/decisions` 必须都走该入口，避免默认页和搜索页口径不同。新增字段如下：
+
+| 字段 | 含义 |
+| --- | --- |
+| `reference_messages_old_to_new` | 本地流水优先，再追加从绫感知块中未重复的近期消息 |
+| `reference_count` | 排除省略提示后的去重消息总数 |
+| `background_memory` | 长期事实、关系状态及无法安全解析的原块 |
+
+增强不修改原 `recent_messages_old_to_new`、`scoped_memory` 或持久日志。解析器只接受明确 `congling:perceived` marker 与稳定标题，未知格式 fail-open。回归测试至少覆盖用户样例6条、长期记忆不计数、HTML/空白与大小写去重、正文冒号、省略提示、损坏块、30条上限，以及状态/搜索接口一致。
 
 能力指标的每项包含 `ms`、`calls`、`status`：
 
@@ -115,11 +127,11 @@ LivingMemory 的 `core/retrieval/request_timing.py` 可通过请求局部 Contex
 
 | 路径 | 方法 | 用途 |
 | --- | --- | --- |
-| console/state | GET | 状态、参数与最近记录 |
-| console/decisions | GET | query / 分类搜索近期记录 |
+| console/state | GET | 状态、参数与最近10条记录；附只读参考流水增强 |
+| console/decisions | GET | query / 分类搜索近期记录；与 state 使用同一展示增强 |
 | console/config | POST | 参数白名单保存 |
 | console/native-segments | GET / POST | 原生分段读取 / 版本校验保存 |
-| console/native-settings | GET / POST | 原生模型与固定人格 |
+| console/native-settings | GET / POST | 原生模型、固定人格与语音回复 |
 | console/image-settings | GET / POST | 独立AI生图设置、模型/路由候选和每日额度 |
 | console/flow | GET | 判定及生成流程结构 |
 | console/probe | POST | 文字判定试跑，有 API 用量 |

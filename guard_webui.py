@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import inspect
 import json
 import math
@@ -98,9 +99,7 @@ POLICY_FIELDS = {
 
 MODE_LABELS = {
     "enforce": "硬闸门（判完就拦，低分不生成）",
-    "shadow": "观察模式（只判定不拦截，用于校准阈值）",
-    "legacy": "旧行为（先生成再丢弃，仅回滚用）",
-    "off": "关闭参与判断（回复方式与撤回开关独立）",
+    "shadow": "观察模式（同步判断并记录，不执行参与拦截）",
 }
 
 Handler = Callable[[Any], Awaitable[Any]]
@@ -146,9 +145,15 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
 
     三类项：
     - 路由本身（``id=provider_id``）：走优先级自动降级；
-    - 路由上游（``id=provider_id::model``）：锁定某个具体上游模型；
+    - 已注册路由上游（``id=provider_id:upstream_N``）：锁定具体API；
+      旧版其它路由仍兼容``provider_id::model``虚拟项；
     - 原生 provider（``id=provider_id``）：选它就是该 provider 自家模型。
     """
+    try:
+        from .guard_router_connections import router_connections, CHAT_TYPES
+    except ImportError:
+        from guard_router_connections import router_connections, CHAT_TYPES
+    connections = router_connections(plugin.context)
     items: dict[str, dict[str, Any]] = {}
     try:
         for provider in plugin.context.get_all_providers():
@@ -156,6 +161,11 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
             provider_id = str(config.get("id", "") or "")
             if not provider_id:
                 continue
+            if config.get("enable") is False:
+                continue
+            connection = connections.get(provider_id)
+            if connection and connection["api_type"] not in CHAT_TYPES:
+                continue  # 某些路由版本会注册生图占位Provider，不能供主对话或判定调用。
             provider_type = str(config.get("type", "") or "")
             display_name = str(
                 config.get("display_name")
@@ -282,17 +292,173 @@ async def _providers(plugin: Any) -> list[dict[str, Any]]:
                 item["supports_audio"] = audio_capable(provider)
         except Exception:
             item["supports_audio"] = False
-    for role in ("stt",):
+    for role in ("stt", "tts"):
         getter = getattr(plugin.context, "get_all_" + role + "_providers", None)
         for provider in getter() if callable(getter) else []:
             config = getattr(provider, "provider_config", {}) or {}
             provider_id = str(config.get("id", "") or "")
             if provider_id:
+                display = str(config.get("display_name") or config.get("label")
+                              or config.get("name") or "").strip()
                 items[provider_id] = {"id": provider_id, "model": str(
                     getattr(provider, "get_model", lambda: "")() or ""),
-                    "kind": "provider", "role": role, "upstreams": [], "instances": 1,
+                    "kind": "provider", "role": role, "display": display,
+                    "upstreams": [], "instances": 1,
                     "supports_images": False, "supports_audio": role == "stt"}
+    for pid, connection in connections.items():
+        if pid in items and connection["api_type"] in CHAT_TYPES:
+            items[pid]["display"] = connection["display"]
+            items[pid]["model"] = connection["model"]
+            items[pid]["api_type"] = connection["api_type"]
     return sorted(items.values(), key=lambda item: item["id"])
+
+
+_CONGLING_PERCEIVED_MARKER = re.compile(
+    r"^\s*<!--congling:perceived:[^>]*-->\s*", re.IGNORECASE)
+_CONGLING_PERCEIVED_TITLE = "以下是这个会话里最近的几条消息"
+_CONGLING_PERCEIVED_END = "【补充结束】"
+_OMISSION_LINE = re.compile(r"^\s*(?:[.…·]{2,}|…)\s*[（(]?.*略.*[）)]?\s*$")
+_MESSAGE_AGE = re.compile(r"^\[(\d+(?:\.\d+)?)秒前\]\s*")
+_MESSAGE_SENDER = re.compile(r"^([^:：\n]{1,80})\s*[:：]\s*(.+)$", re.DOTALL)
+
+
+def _display_text(value: Any, limit: int = 600) -> str:
+    return re.sub(r"\s+", " ", html.unescape(str(value or ""))).strip()[:limit]
+
+
+def _display_message(value: Any, source: str) -> dict[str, Any]:
+    """把历史记录的对象/字符串转为只读展示对象，不回写原日志。"""
+    if isinstance(value, dict):
+        message = dict(value)
+        message["text"] = _display_text(message.get("text"))
+        if message.get("sender_name") is not None:
+            message["sender_name"] = _display_text(message["sender_name"], 80)
+        message["source"] = source
+        return message
+
+    raw = html.unescape(str(value or "")).strip()
+    age_match = _MESSAGE_AGE.match(raw)
+    if age_match:
+        raw = raw[age_match.end():].strip()
+    message: dict[str, Any] = {
+        "text": _display_text(raw),
+        "sender_name": "",
+        "source": source,
+    }
+    if age_match:
+        message["age_seconds"] = float(age_match.group(1))
+    if raw.startswith("{"):
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            parsed = None
+        if isinstance(parsed, dict) and isinstance(parsed.get("text"), str):
+            message.update(parsed)
+            message["text"] = _display_text(parsed["text"])
+            message["source"] = source
+            return message
+    if raw.startswith("[我]:"):
+        message["sender_name"] = "机器人"
+        message["text"] = _display_text(raw[4:])
+        return message
+    sender = _MESSAGE_SENDER.match(raw)
+    if sender:
+        message["sender_name"] = _display_text(sender.group(1), 80)
+        message["text"] = _display_text(sender.group(2))
+    return message
+
+
+def _message_key(message: dict[str, Any]) -> tuple[str, str]:
+    sender = _display_text(
+        message.get("sender_name") or message.get("sender_id"), 80).casefold()
+    return sender, _display_text(message.get("text")).casefold()
+
+
+def _congling_perceived(block: Any) -> tuple[list[dict[str, Any]], bool]:
+    """只解析从绫稳定的感知块；格式未知时返回原块给背景资料展示。"""
+    if not isinstance(block, str) or not _CONGLING_PERCEIVED_MARKER.match(block):
+        return [], False
+    lines = block.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    title_at = next(
+        (index for index, line in enumerate(lines)
+         if _CONGLING_PERCEIVED_TITLE in line),
+        None,
+    )
+    if title_at is None:
+        return [], False
+
+    messages: list[dict[str, Any]] = []
+    for line in lines[title_at + 1:]:
+        text = html.unescape(line).strip()
+        if text == _CONGLING_PERCEIVED_END:
+            break
+        if not text:
+            continue
+        if _OMISSION_LINE.match(text):
+            messages.append({
+                "text": _display_text(text),
+                "sender_name": "",
+                "source": "congling_perceived",
+                "is_omission": True,
+            })
+            continue
+        messages.append(_display_message(text, "congling_perceived"))
+    # 已识别但没有任何可展示行时保留原块，避免静默丢失格式变化。
+    return messages, bool(messages)
+
+
+def _display_chat_data(chat_data: Any) -> Any:
+    if not isinstance(chat_data, dict):
+        return chat_data
+    chat = dict(chat_data)
+    reference: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(message: dict[str, Any]) -> None:
+        if len(reference) >= 30:
+            return
+        if message.get("is_omission"):
+            reference.append(message)
+            return
+        key = _message_key(message)
+        if key in seen:
+            return
+        seen.add(key)
+        reference.append(message)
+
+    local = chat.get("recent_messages_old_to_new")
+    if isinstance(local, list):
+        for item in local:
+            add(_display_message(item, "livinghello"))
+
+    background: list[Any] = []
+    scoped_memory = chat.get("scoped_memory")
+    if isinstance(scoped_memory, list):
+        for block in scoped_memory:
+            perceived, parsed = _congling_perceived(block)
+            if not parsed:
+                background.append(block)
+                continue
+            for message in perceived:
+                add(message)
+    elif scoped_memory is not None:
+        background.append(scoped_memory)
+
+    chat["reference_messages_old_to_new"] = reference
+    chat["reference_count"] = sum(
+        1 for message in reference if not message.get("is_omission"))
+    chat["background_memory"] = background
+    return chat
+
+
+async def _decision_rows(plugin: Any, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched = await plugin._trace().enrich(rows)
+    result = []
+    for row in enriched:
+        display_row = dict(row)
+        display_row["chat_data"] = _display_chat_data(row.get("chat_data"))
+        result.append(display_row)
+    return result
 
 
 async def _state(plugin: Any) -> dict[str, Any]:
@@ -319,7 +485,9 @@ async def _state(plugin: Any) -> dict[str, Any]:
         "congling_compat": _congling_compat(plugin),
         "providers": await _providers(plugin),
         "distribution": engine.score_distribution(engine.provider_label()),
-        "decisions": engine.log.recent(100),
+        # 概览只给出最近10条；完整排查仍通过搜索接口覆盖内存中的600条。
+        "decisions": await _decision_rows(plugin, engine.log.recent(10)),
+        "listeners": plugin._trace().listeners(),
     }
 
 
@@ -378,7 +546,7 @@ def _coerce(key: str, value: Any) -> Any:
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
     if key in STRING_FIELDS:
         text = str(value or "").strip()
-        if key == "gate_mode" and text not in {"enforce", "shadow", "legacy", "off"}:
+        if key == "gate_mode" and text not in {"enforce", "shadow"}:
             raise ValueError(f"未知模式: {text}")
         if key == "empty_mention_mode" and text not in {"fixed", "persona"}:
             raise ValueError(f"未知的 @ 回复方式: {text}")
@@ -478,10 +646,35 @@ async def handle_decisions(plugin: Any):
     if category not in {"", "private", "group", "public"}:
         return _failure("判定分类无效", 400)
     return _response({
-        "decisions": plugin.engine.log.recent(100, query=query, category=category),
+        "decisions": await _decision_rows(
+            plugin, plugin.engine.log.recent(100, query=query, category=category)),
         "category": category,
         "query": query, "retained": len(plugin.engine.log.ring), "limit": 100,
     })
+
+
+async def handle_request_trace(plugin):
+    try:
+        from .guard_request_trace import ID_RE
+    except ImportError:
+        from guard_request_trace import ID_RE
+    params = getattr(request, "query", None)
+    if params is None:
+        params = getattr(request, "args", {})
+    rid = str(params.get("request_id", "") or "")
+    if not ID_RE.fullmatch(rid):
+        return _failure("request_id须为32位小写十六进制ID", 400)
+    service = plugin._trace()
+    data = await service.get(rid)
+    if data is None:
+        return _failure("追踪存储不可用" if service.health["storage"] == "unavailable"
+                        else "未找到此请求追踪（可能是旧记录或已超过保留范围）",
+                        503 if service.health["storage"] == "unavailable" else 404)
+    return _response(data)
+
+
+async def handle_listeners(plugin):
+    return _response(plugin._trace().listeners())
 
 
 def _native(plugin):
@@ -504,9 +697,23 @@ def _image_settings(plugin):
 async def handle_native_settings(plugin):
     try:
         data = _native_settings(plugin).read(request.query.get("config_id", "default"))
-        data["providers"] = [p for p in await _providers(plugin) if p.get("role") == "chat"
-                             and p.get("kind") != "router_upstream"]
+        data["providers"] = [p for p in await _providers(plugin)
+                             if p.get("role") in {"chat", "tts"} and "::" not in p["id"]]
         return _response(data)
+    except NativeReplyError as exc:
+        return _failure(str(exc), exc.status)
+
+
+async def handle_native_profile(plugin):
+    try:
+        return _response(_native_settings(plugin).selected_profile())
+    except NativeReplyError as exc:
+        return _failure(str(exc), exc.status)
+
+
+async def handle_save_native_profile(plugin):
+    try:
+        return _response(await _native_settings(plugin).select_profile(await request.json(default={})))
     except NativeReplyError as exc:
         return _failure(str(exc), exc.status)
 
@@ -632,11 +839,15 @@ def register_webui(plugin: Any, context: Context) -> None:
     routes: list[tuple[str, str, Handler, str]] = [
         ("console/state", "GET", handle_state, "智能过滤控制台状态"),
         ("console/decisions", "GET", handle_decisions, "搜索群ID、私聊QQ及判定内容"),
+        ("console/request-trace", "GET", handle_request_trace, "读取单次请求的监听与执行追踪"),
+        ("console/listeners", "GET", handle_listeners, "核查当前实例激活监听与采集健康"),
         ("console/config", "POST", handle_config, "保存智能过滤参数"),
         ("console/native-segments", "GET", handle_native_segments, "读取AstrBot原生分段配置"),
         ("console/native-segments", "POST", handle_save_native_segments, "同步AstrBot原生分段配置"),
-        ("console/native-settings", "GET", handle_native_settings, "读取原生模型与人格配置"),
-        ("console/native-settings", "POST", handle_save_native_settings, "保存原生模型与固定人格"),
+        ("console/native-settings", "GET", handle_native_settings, "读取原生模型、人格与语音配置"),
+        ("console/native-profile", "GET", handle_native_profile, "读取控制台选中的原生配置"),
+        ("console/native-profile", "POST", handle_save_native_profile, "保存控制台选中的原生配置"),
+        ("console/native-settings", "POST", handle_save_native_settings, "保存原生模型、固定人格与语音配置"),
         ("console/image-settings", "GET", handle_image_settings, "读取独立AI生图配置与每日额度"),
         ("console/image-settings", "POST", handle_save_image_settings, "保存独立AI生图设置"),
         ("console/flow", "GET", handle_flow, "读取判定与生成流程"),

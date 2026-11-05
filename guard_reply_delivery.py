@@ -12,6 +12,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from astrbot.api.message_components import At, Plain, Reply
+try:
+    from .guard_request_trace import emit, TRACE_KEY
+except ImportError:
+    from guard_request_trace import emit, TRACE_KEY
 
 OWNER_KEY = "_at_guard_reply_owner"
 RECALLED_KEY = "_at_guard_source_recalled"
@@ -121,6 +125,10 @@ class ReplyDelivery:
         return False
 
     def block(self, event):
+        emit(event, "delivery", "cancelled", reason="message_recalled")
+        service = event.get_extra(TRACE_KEY)
+        if service:
+            service.finish(event, "cancelled", "message_recalled")
         event.set_extra(RECALLED_KEY, True)
         event.set_extra("_at_guard_delivery_blocked", "message_recalled")
         result = event.get_result()
@@ -207,11 +215,14 @@ class ReplyDelivery:
         started = time.monotonic()
         previous = event.get_extra("_at_guard_typing_seconds", 0)
         event.set_extra("_at_guard_typing_started", started)
+        emit(event, "typing", "running" if seconds else "disabled")
         try:
             return await self.pause(event, seconds)
         finally:
             event.set_extra("_at_guard_typing_seconds", previous + max(0, time.monotonic() - started))
             event.set_extra("_at_guard_typing_started", None)
+            emit(event, "typing", "cancelled" if self.recalled(event) else "success" if seconds else "disabled",
+                 ms=round((time.monotonic() - started) * 1000, 2))
 
     def arm(self, event, result, *, streaming=False):
         """登记结果身份；派生链继承局部标记，宿主可自由创建Plain或转换媒体。"""
@@ -265,7 +276,12 @@ class ReplyDelivery:
                     belongs = bool(plan and getattr(message, "_at_guard_delivery_token", None)
                                    is plan["token"])
                     if not belongs:
-                        sent = await original(message, *args, **kwargs)
+                        try:
+                            sent = await original(message, *args, **kwargs)
+                        except BaseException as exc:
+                            self.trace_failure(event, exc)
+                            raise
+                        self.trace_sent(event, incoming, "direct")
                         if not plan:
                             await self.note_sent(event, incoming)
                         return sent
@@ -283,6 +299,10 @@ class ReplyDelivery:
                     checker = event.get_extra("_at_guard_send_check")
                     reason = checker() if callable(checker) else ""
                     if reason:
+                        emit(event, "delivery", "cancelled", reason=reason)
+                        service = event.get_extra(TRACE_KEY)
+                        if service:
+                            service.finish(event, "cancelled", reason)
                         event.set_extra("_at_guard_delivery_blocked", reason)
                         plan["failed"] = True
                         return
@@ -291,6 +311,10 @@ class ReplyDelivery:
                         return
                     reason = checker() if callable(checker) else ""
                     if reason:
+                        emit(event, "delivery", "cancelled", reason=reason)
+                        service = event.get_extra(TRACE_KEY)
+                        if service:
+                            service.finish(event, "cancelled", reason)
                         event.set_extra("_at_guard_delivery_blocked", reason)
                         plan["failed"] = True
                         return
@@ -298,9 +322,11 @@ class ReplyDelivery:
                         chain = expression.before_send(event, chain, plan)
                     try:
                         sent = await original(self.derive(message, chain), *args, **kwargs)
-                    except BaseException:
+                    except BaseException as exc:
                         plan["failed"] = True
+                        self.trace_failure(event, exc)
                         raise
+                    self.trace_sent(event, chain, "reply_packet")
                     if any(not isinstance(c, (Reply, At)) and type(c).__name__ != "Record"
                            for c in chain):
                         plan["header_sent"] = True
@@ -364,6 +390,30 @@ class ReplyDelivery:
         previous = event.get_extra("_at_guard_sent_text", "")
         event.set_extra("_at_guard_sent_text", previous + "".join(
             c.text for c in chain if isinstance(c, Plain)))
+
+    @staticmethod
+    def trace_sent(event, chain, source):
+        if not chain:
+            return
+        service = event.get_extra(TRACE_KEY)
+        if service:
+            service.increment(event, "sent_packets")
+        if source == "reply_packet" and event.get_extra("_livinghello_agent_done"):
+            event.set_extra("_livinghello_final_packet_sent", True)
+        emit(event, "send", "success", source=source, types=[type(c).__name__ for c in chain])
+        # 原生转换只能证明已发送此组件，不据此推造TTS/文本转图内部执行。
+        if any(type(c).__name__ == "Record" for c in chain):
+            emit(event, "native_tts", "success", reason="record_sent")
+        if any(type(c).__name__ == "Image" for c in chain):
+            emit(event, "native_text_image", "uncollected", reason="image_origin_not_proven")
+
+    @staticmethod
+    def trace_failure(event, exc):
+        state = "cancelled" if isinstance(exc, asyncio.CancelledError) else "failed"
+        emit(event, "send", state, error_type=type(exc).__name__)
+        service = event.get_extra(TRACE_KEY)
+        if service:
+            service.finish(event, state, "send_exception")
 
     async def close(self):
         self.closed = True

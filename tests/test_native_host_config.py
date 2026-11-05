@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 
+from guard_native_settings import NativeSettings
 from guard_native_reply import NativeReply, NativeReplyError, values
 from test_native_reply import NATIVE
 
@@ -65,8 +66,18 @@ class NativeHostConfigTests(unittest.IsolatedAsyncioTestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.path = Path(self.folder.name) / "native.json"
-        self.config = config_class(platform_settings={"segmented_reply": copy.deepcopy(NATIVE)},
-                                   unrelated={"preserve": True}, agent_runner={})
+        self.config = config_class(
+            platform_settings={"segmented_reply": copy.deepcopy(NATIVE)},
+            unrelated={"preserve": True},
+            agent_runner={"runner_type": "local", "config": {
+                "model": {"provider_id": "", "fallback_provider_ids": [], "request_max_retries": 2},
+                "persona": {"persona_id": "[%None]"}}},
+            provider_settings={"streaming_response": False},
+            provider_tts_settings={"enable": False, "provider_id": "tts-a",
+                                   "dual_output": False, "use_file_service": False,
+                                   "trigger_probability": 0.5},
+            t2i=False, t2i_word_threshold=150, t2i_strategy="remote",
+            t2i_endpoint="", t2i_active_template="base")
         for key, value in dict(config_path=str(self.path), _save_state_lock=threading.Lock(),
                                _save_commit_lock=threading.Lock(), _save_revision=0,
                                _save_committed_revision=0).items():
@@ -99,6 +110,38 @@ class NativeHostConfigTests(unittest.IsolatedAsyncioTestCase):
                          self.bridge.read()["values"])
         self.assertEqual(self.config["unrelated"], {"preserve": True})
         self.assertEqual(self.reload.await_count, 2)
+
+    async def test_voice_bridge_and_native_page_share_actual_host_fields(self):
+        plugin = SimpleNamespace(
+            context=SimpleNamespace(astrbot_config_mgr=self.manager, persona_manager=None),
+            data_dir=Path(self.folder.name), logger=logging.getLogger("native-voice-test"))
+        settings = NativeSettings(plugin, self.bridge)
+        providers = [
+            {"id": "chat-a", "role": "chat", "kind": "provider"},
+            {"id": "tts-a", "role": "tts", "kind": "provider"},
+            {"id": "tts-b", "role": "tts", "kind": "provider"},
+        ]
+        current = settings.read()
+        saved = await settings.save(self.request, {
+            "config_id": "default", "expected_revision": current["revision"],
+            "values": {"tts_enabled": True, "tts_provider_id": "tts-b"}}, providers)
+        self.assertTrue(saved["values"]["tts_enabled"])
+        self.assertEqual(saved["values"]["tts_provider_id"], "tts-b")
+        disk = json.loads(self.path.read_text(encoding="utf-8-sig"))
+        self.assertTrue(disk["provider_tts_settings"]["enable"])
+        self.assertEqual(disk["provider_tts_settings"]["provider_id"], "tts-b")
+        self.assertEqual(disk["provider_tts_settings"]["trigger_probability"], 0.5)
+
+        stale = {"config_id": "default", "expected_revision": saved["revision"],
+                 "values": {"tts_enabled": True, "tts_provider_id": "tts-b"}}
+        native = copy.deepcopy(dict(self.service.get_profile("default")["config"]))
+        native["provider_tts_settings"].update(enable=False, provider_id="tts-a")
+        await self.service.update_profile("default", native)
+        self.assertFalse(settings.read()["values"]["tts_enabled"])
+        self.assertEqual(settings.read()["values"]["tts_provider_id"], "tts-a")
+        with self.assertRaises(NativeReplyError) as error:
+            await settings.save(self.request, stale, providers)
+        self.assertEqual(error.exception.status, 409)
 
     async def test_second_period_uses_actual_host_save_and_zero_interval(self):
         await self.bridge.save(self.request, self.body(

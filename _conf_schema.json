@@ -18,16 +18,14 @@
   "understand_voice_enabled": {"type":"bool","default":false,"description":"语音转文字理解"},
   "understand_voice_provider_id": {"type":"string","default":"","description":"语音理解模型","editor_mode":"select_provider"},
   "gate_mode": {
-    "description": "闸门模式（总开关）",
+    "description": "参与模式",
     "type": "string",
     "default": "enforce",
     "options": [
       "enforce",
-      "shadow",
-      "legacy",
-      "off"
+      "shadow"
     ],
-    "hint": "off仅关闭参与判断；回复方式、撤回保护和碎片等待分别控制。"
+    "hint": "硬闸门按判断结论决定是否生成；观察模式同步完成判断并记录，但不执行参与拦截，仍会增加判定等待和API用量。回复方式、撤回保护和碎片等待分别控制。"
   },
   "participation_confidence_threshold": {
     "description": "普通群消息参与判断",

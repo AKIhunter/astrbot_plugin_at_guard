@@ -195,6 +195,47 @@ class HandoffTest(unittest.TestCase):
 
 
 class VisionListTest(unittest.TestCase):
+    def test_provider_list_keeps_chat_stt_tts_roles_separate(self):
+        chat = Provider(model="chat-a")
+        tts = SimpleNamespace(provider_config=dict(
+            id="tts-a", type="mimo_tts", display_name="大肥鱼语音"),
+            get_model=lambda: "voice-a")
+        stt = SimpleNamespace(provider_config=dict(id="stt-a", type="speech_to_text"),
+            get_model=lambda: "speech-a")
+        context = SimpleNamespace(
+            get_all_providers=lambda: [chat],
+            get_all_tts_providers=lambda: [tts],
+            get_all_stt_providers=lambda: [stt],
+        )
+        entries = asyncio.run(_providers(SimpleNamespace(context=context)))
+        roles = {row["id"]: row["role"] for row in entries}
+        self.assertEqual(roles["chat-a"], "chat")
+        self.assertEqual(roles["stt-a"], "stt")
+        self.assertEqual(roles["tts-a"], "tts")
+        voice = next(row for row in entries if row["id"] == "tts-a")
+        self.assertEqual((voice["display"], voice["model"]), ("大肥鱼语音", "voice-a"))
+        self.assertNotIn("api_key", json.dumps(entries))
+
+    def test_registered_router_names_use_configured_api_names(self):
+        pinned = SimpleNamespace(provider_config=dict(id="router:upstream_3", type="multi_api_router",
+            upstream_slot=3, parent_provider_id="router", display_name="旧名字"),
+            get_model=lambda: "chat-model", upstreams=[])
+        config = dict(enabled=True, provider_id="router", upstream_3=dict(
+            name="具体聊天API", api_type="chat", api_base="https://example.invalid/v1",
+            api_key="secret-marker", model="chat-model"))
+        config["upstream_6"] = dict(name="生图API", api_type="image_generation",
+            api_base="https://example.invalid/v1", api_key="image-secret", model="image-six")
+        image = SimpleNamespace(provider_config=dict(id="router:upstream_6", type="multi_api_router"),
+                                get_model=lambda: "image-six")
+        context = SimpleNamespace(get_all_providers=lambda: [pinned, image],
+            get_registered_star=lambda _: SimpleNamespace(activated=True,
+                star_cls=SimpleNamespace(config=config)))
+        entries = asyncio.run(_providers(SimpleNamespace(context=context)))
+        self.assertEqual(entries[0]["display"], "具体聊天API")
+        self.assertEqual(entries[0]["id"], "router:upstream_3")
+        self.assertEqual(len(entries), 1)
+        self.assertNotIn("secret-marker", str(entries))
+
     def test_deepseek_quiet_is_not_vision_despite_all_modalities(self):
         p = Provider(model="deepseek-flash", modalities=["text","image","audio","tool_use"])
         self.assertFalse(supports_images(p))

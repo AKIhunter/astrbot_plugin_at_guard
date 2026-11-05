@@ -89,7 +89,15 @@ class PolicyTest(unittest.TestCase):
         self.assertEqual(len(p.prompts), 2)
         self.assertEqual(engine.stats["judged"], 1)
         self.assertEqual(engine.stats["model_calls"], 2)
+        self.assertEqual(d.model_calls, 2)
         self.assertTrue(d.memory_grounded)
+        self.assertEqual([attempt["stage"] for attempt in d.attempts], ["text", "text"])
+        self.assertEqual(d.timings["text"]["calls"], 2)
+        self.assertEqual(
+            d.timings["text"]["ms"],
+            sum(attempt["ms"] for attempt in d.attempts),
+        )
+        self.assertGreaterEqual(d.latency_ms, d.timings["text"]["ms"])
         self.assertIn("修复日志", p.prompts[1])
 
     def test_missing_memory_does_not_allow_reply(self):
@@ -101,6 +109,8 @@ class PolicyTest(unittest.TestCase):
         _, d = self.decide(p, memory)
         self.assertEqual(d.reason, "context_missing")
         self.assertEqual(len(p.prompts), 1)
+        self.assertEqual(d.model_calls, 1)
+        self.assertEqual(d.timings["text"]["calls"], 1)
 
     def test_memory_rejudge_obeys_hourly_budget(self):
         p = SequenceProvider(output(score=90, ground="memory"))
@@ -111,6 +121,8 @@ class PolicyTest(unittest.TestCase):
         _, d = self.decide(p, memory, gate_hourly_budget=1)
         self.assertEqual(d.action, "silence")
         self.assertEqual(len(p.prompts), 1)
+        self.assertEqual(d.model_calls, 1)
+        self.assertEqual(d.timings["text"]["calls"], 1)
 
     def test_memory_timeout_fails_closed(self):
         async def memory():

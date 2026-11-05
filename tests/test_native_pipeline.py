@@ -202,6 +202,13 @@ class NativePipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(event.sent[0].chain[-1], Image)
         self.assertFalse(any(isinstance(c, Plain) for r in event.sent for c in r.chain))
 
+    async def test_native_tts_switch_keeps_text_when_off_and_records_when_on(self):
+        event, _, _ = await self.run_pipeline(tts=False)
+        self.assertFalse(any(isinstance(c, Record) for r in event.sent for c in r.chain))
+        self.assertTrue(any(isinstance(c, Plain) for r in event.sent for c in r.chain))
+        event, _, _ = await self.run_pipeline(tts=True)
+        self.assertTrue(all(isinstance(c, Record) for r in event.sent for c in r.chain))
+
     async def test_actual_native_loop_ignores_late_recall_but_stops_on_context_change(self):
         for reason in ("recall", "context_changed"):
             event, _, _ = await self.run_pipeline(cancel=reason)

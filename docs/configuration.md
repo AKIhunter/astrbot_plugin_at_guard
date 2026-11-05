@@ -7,7 +7,7 @@
 | 配置域 | 权威保存位置 | 生效范围 |
 | --- | --- | --- |
 | LivingHello 参数 | AstrBot 保存的本插件配置 | 本插件；已保存值优先于下表默认值 |
-| 原生模型、人格、排版、分段 | 所选 AstrBot 原生配置 | 实际分配到该配置的会话 |
+| 原生模型、人格、语音、排版、分段 | 所选 AstrBot 原生配置 | 实际分配到该配置的会话 |
 | 固定人格 | 原插件数据目录 native_persona_pins.json | 按原生配置固定，兼容已有技术 ID |
 | 独立AI生图 | 本插件 image_generation.json | 全插件能力，复用所选模型连接 |
 
@@ -38,7 +38,7 @@
 | `understand_image_provider_id` | `""` | 图片理解模型 |
 | `understand_voice_enabled` | `false` | 语音转文字理解 |
 | `understand_voice_provider_id` | `""` | 语音理解模型 |
-| `gate_mode` | `"enforce"` | 闸门模式（总开关） |
+| `gate_mode` | `"enforce"` | 参与模式 |
 | `participation_confidence_threshold` | `65` | 普通群消息参与判断 |
 | `classifier_provider_id` | `""` | 判定用的小模型 |
 | `classifier_timeout_seconds` | `3.5` | 判定超时（秒） |
@@ -104,6 +104,8 @@
 | fallback_provider_ids | agent_runner.config.model.fallback_provider_ids | 已注册回退模型顺序 |
 | request_max_retries | agent_runner.config.model.request_max_retries | 请求尝试上限，允许 1–10 |
 | streaming_response | provider_settings.streaming_response | 原生流式开关 |
+| tts_enabled | provider_tts_settings.enable | 使用语音回复；不自动选择TTS模型 |
+| tts_provider_id | provider_tts_settings.provider_id | 默认TTS模型；空值可由会话单独选择 |
 | persona_id | agent_runner.config.persona.persona_id | 手动选择并保存后固定；支持无人格 |
 | t2i | t2i | 把回复文字排版成图 |
 | t2i_word_threshold | t2i_word_threshold | 原生排版字数阈值，允许 0–100000 |
@@ -111,7 +113,13 @@
 | t2i_endpoint | t2i_endpoint | 原生远程排版服务地址 |
 | t2i_active_template | t2i_active_template | 已配置模板名 |
 
-人格直接显示在原生配置卡片顶部，模型和排版使用可展开二级分组；问号解释保存位置与用途。配置范围收进“编辑范围”，保留既有编辑目标和会话分配规则。主模型改变不连带改变判定小模型。
+“AstrBot配置人格”统一显示编辑配置及原生人格，模型、语音和排版使用可展开二级分组；问号解释保存位置与用途。编辑配置保存到插件数据目录的 `native_selected_profile.json`，刷新与插件重载后继续选择同一配置，不依赖 iframe 本地存储。选择配置不会修改人格，也不会替代宿主会话分配；人格仍须手动保存后固定。主模型改变不连带改变判定小模型。此编辑目标是本控制台共用的选择记录。
+
+多 API 路由的具体聊天 Provider 可用于主模型与回退模型，下拉显示路由配置中的 API 名称和模型名，保存稳定的 `provider_id:upstream_N`。旧版 `provider::model` 虚拟项仍仅用于插件内部判定，不写入原生主模型。
+
+语音回复候选只读取 AstrBot 已注册的 TTS Provider，与聊天模型严格分开。`tts_enabled` 和 `tts_provider_id` 双向同步所选原生配置；`trigger_probability`、`dual_output`、`use_file_service` 不由本页编辑。开启语音回复仍需有效 Provider、会话允许且触发概率通过。
+
+独立生图同时读取已激活路由的服务端上游配置，因此 `image_generation` 类型即使没有注册聊天 Provider，也可作为生图连接。`route_enabled` 只控制自动聊天候选链，不影响独立生图选择；路由整体关闭或连接删除后停止使用。密钥和 API 地址只在服务端用于请求，不包含在浏览器列表中。生图模型列表不会包含 embedding、rerank、STT/TTS 等非生图类型。
 
 ## AstrBot 原生分段
 
@@ -133,8 +141,14 @@
 | `model` | `""` | 可指定同API生图模型；空值沿用所选模型名 |
 | `protocol` | `"images"` | 标准 images/generations / images/edits；chat_images 使用 chat/completions 的 image 模态 |
 | `daily_limit` | `20` | 全插件按服务器本地自然日共享，0禁止生图，范围0–1000 |
-| `size` | `"1024x1024"` | 支持auto、1024x1024、1536x1024、1024x1536 |
-| `timeout_seconds` | `90` | 10–180秒；不自动切换上游或重试 |
+| `size` | `"1024x1024"` | 支持auto、预设尺寸及512–2048像素的自定义宽高 |
+| `timeout_seconds` | `90` | 10–500秒；不自动切换上游或重试 |
 <!-- image-defaults:end -->
 
 每次请求1张，调用前持久预占额度；失败、超时、取消后的已请求次数不退回。`image_generation_quota.sqlite3` 保存散列请求标识及计数，重载不清零，同消息相同请求不重复生成。生成图片保存在 `generated_images/`，后续生图时清理超过7天的文件。
+
+## 请求诊断存储
+
+`request_traces.sqlite3` 与生图额度库分开，自动保存最近600次请求，每次最多96条步骤及64KiB快照；待写队列最多128个请求。超限或数据库不可写时降级采集，不阻断回复；详情会提示截断或不可读。重载有界刷新，历史未完成请求显示结束状态未采集。
+
+追踪只保存ID、受控原因、功能/工具/模型显示名、耗时、次数和发送组件类型，不新增提示词、思考、工具参数或原始响应副本。不新增可编辑配置，原有功能开关及每日额度政策继续生效。[使用方法](usage.md#按请求id排查)。

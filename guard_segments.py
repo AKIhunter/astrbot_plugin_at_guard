@@ -8,8 +8,10 @@ from astrbot.core.agent.message import TextPart
 
 try:
     from .guard_native_reply import managed_options, second_period_regex
+    from .guard_request_trace import emit
 except ImportError:
     from guard_native_reply import managed_options, second_period_regex
+    from guard_request_trace import emit
 
 
 class ReplySegments:
@@ -72,12 +74,15 @@ class ReplySegments:
         raw = self.config(event)
         options = managed_options(raw)
         if options is None or (not streaming and not result.is_llm_result()):
+            emit(event, "segments", "uncollected" if options is None else "skipped",
+                 reason="host_managed" if options is None else "non_llm_result")
             return False
         if getattr(result, "_at_guard_segments_prepared", False):
             return True
         split = raw.get("enable") is True
         options["split_words"] = raw.get("split_words", [])
         chain = []
+        before = len(result.chain or [])
         # 流式每个token不是一个模型段落；相邻Plain先合成完整模型正文。
         pending = ""
         def flush():
@@ -124,6 +129,8 @@ class ReplySegments:
                     component.text = re.sub(cleanup, "", component.text)
         result.chain = chain
         result._at_guard_segments_prepared = True
+        emit(event, "segments", "success" if split else "disabled", before=before,
+             after=len(chain), count=sum(isinstance(c, Plain) for c in chain))
         return True
 
     def stream_packets(self, event, result):
