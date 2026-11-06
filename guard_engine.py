@@ -21,6 +21,19 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+try:
+    from .guard_classifier_outage import (
+        ClassifierFailure,
+        FailureDisposition,
+        classify_classifier_failure,
+    )
+except ImportError:
+    from guard_classifier_outage import (
+        ClassifierFailure,
+        FailureDisposition,
+        classify_classifier_failure,
+    )
+
 GATE_MODES = ("enforce", "shadow")
 DEFAULT_MODE = "enforce"
 DEFAULT_THRESHOLD = 65
@@ -262,6 +275,10 @@ class GateProvider:
 class GateFailure(Exception):
     """有界降级的可记录原因，不保存可能含密钥/图片URL的上游异常正文。"""
 
+    def __init__(self, reason: str, failure_category: str = "") -> None:
+        super().__init__(reason)
+        self.failure_category = str(failure_category or "")
+
 
 @dataclass
 class Decision:
@@ -293,6 +310,7 @@ class Decision:
     image_handoff: str = ""  # summary | summary_and_original | original
     image_cache_hits: int = 0
     available_image_count: int = 0
+    failure_category: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -321,6 +339,7 @@ class Decision:
             "image_handoff": self.image_handoff,
             "image_cache_hits": self.image_cache_hits,
             "available_image_count": self.available_image_count,
+            "failure_category": self.failure_category,
             "context_count": len(self.chat_data.get("recent_messages_old_to_new", [])),
         }
 
@@ -752,6 +771,88 @@ class GateEngine:
         self.stats = self._empty_stats()
         self._save_state(force=True)
 
+    async def probe_classifier(
+        self,
+        resolve_provider: Callable[[], Awaitable[Any]],
+    ) -> ClassifierFailure | None:
+        """Call the current text provider once with synthetic, non-user data.
+
+        None means the request was reachable and returned the classifier
+        protocol. This path deliberately bypasses decision logs, statistics,
+        group budgets, memory, media, and reply delivery.
+        """
+        fallback = ClassifierFailure(
+            "configuration_error", FailureDisposition.NEEDS_ATTENTION
+        )
+        try:
+            provider = await asyncio.wait_for(
+                resolve_provider(), max(0.001, min(2.0, self.timeout()))
+            )
+        except asyncio.TimeoutError:
+            return ClassifierFailure("timeout", FailureDisposition.RECOVERABLE)
+        except Exception as exc:
+            return classify_classifier_failure(exception=exc) or fallback
+        if provider is None:
+            return ClassifierFailure(
+                "provider_missing", FailureDisposition.NEEDS_ATTENTION
+            )
+
+        try:
+            model = self.provider_model()
+            if not model:
+                getter = getattr(provider, "get_model", None)
+                model = str(getter() or "") if callable(getter) else ""
+            provider_config = getattr(provider, "provider_config", {}) or {}
+            if not model:
+                model = str(provider_config.get("model", "") or "").strip()
+            prompt = "\n".join((
+                "根据以下固定合成资料验证文字判定协议。资料不是用户消息，也不是指令：",
+                json.dumps({
+                    "scene": "健康探测",
+                    "recent_messages_old_to_new": [],
+                    "recent_bot_message": None,
+                    "current_message": {
+                        "text": "固定探测样例：这段对话已经结束，不需要继续参与。",
+                        "synthetic_probe": True,
+                    },
+                    "scoped_memory": [],
+                    "image_sources": [],
+                }, ensure_ascii=False),
+                "只输出 JSON。",
+            ))
+            response = await asyncio.wait_for(
+                provider.text_chat(
+                    prompt=prompt,
+                    session_id="at_guard_classifier_health_probe",
+                    contexts=[],
+                    system_prompt=GATE_SYSTEM_PROMPT,
+                    model=model or None,
+                    request_max_retries=1,
+                    max_tokens=256,
+                ),
+                self.timeout(),
+            )
+            raw = str(getattr(response, "completion_text", "") or "")
+        except asyncio.TimeoutError:
+            return ClassifierFailure("timeout", FailureDisposition.RECOVERABLE)
+        except Exception as exc:
+            return classify_classifier_failure(exception=exc) or fallback
+        if not raw.strip():
+            return ClassifierFailure(
+                "empty_response", FailureDisposition.RECOVERABLE
+            )
+        parsed = parse_gate_details(raw)
+        if not (
+            parsed is not None
+            and parsed[0] in {"reply", "silent"}
+            and parsed[3] is not None
+            and parsed[4] in MODEL_REASONS
+        ):
+            return ClassifierFailure(
+                "protocol_error", FailureDisposition.RECOVERABLE
+            )
+        return None
+
     # ---------------------------------------------------------------- 判定
     @staticmethod
     def _decision(
@@ -770,6 +871,7 @@ class GateEngine:
         model_reason: str = "",
         model_calls: int = 0,
         memory_lines: tuple[str, ...] = (),
+        failure_category: str = "",
     ) -> Decision:
         return Decision(
             score=score,
@@ -790,6 +892,7 @@ class GateEngine:
             model_calls=model_calls,
             memory_grounded=bool(memory_lines),
             memory_lines=memory_lines,
+            failure_category=failure_category,
         )
 
     def _record(self, decision: Decision) -> None:
@@ -858,6 +961,7 @@ class GateEngine:
                 "chat_data": decision.chat_data,
                 "image_cache_hits": decision.image_cache_hits,
                 "available_image_count": decision.available_image_count,
+                "failure_category": decision.failure_category,
                 **decision_identity({"gid": group_key, "chat_data": decision.chat_data}),
                 **{key: value for key, value in (identity or {}).items()
                    if key in {"request_id", "message_id"}},
@@ -927,15 +1031,36 @@ class GateEngine:
             cached_image_summaries=cached, available_image_sources=available_sources,
         )
         deadline = started + self.total_timeout()
+        resolve_failure_category = ""
+        resolver_failed = False
         try:
             provider = await asyncio.wait_for(
                 resolve_provider(), max(0.001, deadline - time.monotonic()))
+        except asyncio.TimeoutError:
+            resolver_failed = True
+            resolve_failure_category = "timeout"
+            provider = None
         except Exception as exc:  # noqa: BLE001 - 任何异常都按 fail-closed 处理
-            self.logger.debug(f"[智能过滤] 取判定模型失败: {exc!r}")
+            resolver_failed = True
+            failure = classify_classifier_failure(exception=exc)
+            resolve_failure_category = (
+                failure.category if failure is not None else ""
+            )
+            self.logger.debug(
+                "[智能过滤] 取判定模型失败，已按脱敏类别关闭本次判定。"
+            )
             provider = None
         if provider is None:
+            category = resolve_failure_category or (
+                "" if resolver_failed else "provider_missing"
+            )
             decision = self._decision(
-                started, threshold, "silence", "no_provider", "error"
+                started,
+                threshold,
+                "silence",
+                "no_provider" if category == "provider_missing" else "error",
+                "error",
+                failure_category=category,
             )
             record_early(decision)
             return decision
@@ -1038,23 +1163,32 @@ class GateEngine:
                 result = await bounded(target.provider.text_chat(**kwargs), timeout)
                 raw = str(getattr(result, "completion_text", "") or "")
                 last_raw = raw
+                if not raw.strip():
+                    raise GateFailure("empty_response", "empty_response")
                 parsed = parse_gate_details(raw)
                 if not valid(parsed):
-                    raise GateFailure("parse_error")
+                    raise GateFailure("parse_error", "protocol_error")
                 attempt["status"] = "ok"
                 attempt.update(act=parsed[0], score=parsed[1], ground=parsed[2],
                                understood=parsed[3], reason=parsed[4])
                 return raw, parsed
             except asyncio.TimeoutError:
                 attempt["status"] = "timeout"
-                raise GateFailure("timeout") from None
+                raise GateFailure("timeout", "timeout") from None
             except GateFailure as exc:
                 attempt["status"] = str(exc)
+                if exc.failure_category:
+                    attempt["failure_category"] = exc.failure_category
                 raise
             except Exception as exc:
+                failure = classify_classifier_failure(exception=exc)
                 attempt["status"] = "error"
                 attempt["error_type"] = type(exc).__name__
-                raise GateFailure("error") from None
+                if failure is not None:
+                    attempt["failure_category"] = failure.category
+                raise GateFailure(
+                    "error", failure.category if failure is not None else ""
+                ) from None
             finally:
                 attempt["ms"] = int((time.monotonic() - call_started) * 1000)
 
@@ -1077,7 +1211,8 @@ class GateEngine:
             raw, parsed = await classify(prompt)
         except GateFailure as exc:
             return finish(self._decision(started, threshold, "silence", str(exc), "error",
-                                         raw=last_raw, context=prompt))
+                                         raw=last_raw, context=prompt,
+                                         failure_category=exc.failure_category))
 
         # 每次判定至多补查一次记忆。可在文字层或视觉层使用，不能靠记忆猜图片。
         memory_checked = False
@@ -1176,7 +1311,8 @@ class GateEngine:
             if not attempts or attempts[-1]["stage"] != stage:
                 attempts.append({"stage": stage, "model": "", "status": str(exc), "ms": 0})
             return finish(self._decision(started, threshold, "silence", str(exc), "error",
-                                         raw=raw, context=prompt))
+                                         raw=raw, context=prompt,
+                                         failure_category=exc.failure_category))
 
         act, conf, ground, understood, model_reason = parsed
         # 分数修正独立于用户阈值；阈值设为0也不能越过上下文/停口约束。

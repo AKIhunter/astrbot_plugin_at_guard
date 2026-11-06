@@ -10,6 +10,7 @@ import random
 import re
 import time
 import traceback
+from contextvars import ContextVar
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -25,6 +26,10 @@ SOURCE = Path(os.environ.get("ASTRBOT_NATIVE_SOURCE", "/nonexistent-astrbot-sour
 
 
 def stages(guard):
+    def bounded_text(value, maximum):
+        raw = str(value or "").encode("utf-8")
+        return raw[:maximum].decode("utf-8", errors="ignore")
+
     classes = {c.__name__: c for c in (Plain, At, Reply, Image, Record)}
     names = ("Plain At Reply Image Record Face Video Poke Node Nodes File Json Share Music "
              "Forward Location Contact Shake Dice RPS Unknown").split()
@@ -41,6 +46,10 @@ def stages(guard):
         logger=logging.getLogger("native-test"), MessageChain=Chain,
         ResultContentType=content_types, random=random, re=re, time=time,
         math=math, asyncio=asyncio, traceback=traceback, MessageType=MessageType,
+        bounded_text=bounded_text,
+        streaming_response_event=ContextVar(
+            "native_pipeline_streaming_response_event", default=None
+        ),
         registered_stages=[], ContentSafetyCheckStage=object,
         star_map={"at_guard": SimpleNamespace(name="at_guard")},
         EventType=SimpleNamespace(OnDecoratingResultEvent="decorate", OnAfterMessageSentEvent="after"),
@@ -109,6 +118,7 @@ class NativePipelineTests(unittest.IsolatedAsyncioTestCase):
         event.plugins_name = []
         event.is_stopped = lambda: event.stopped
         event.clear_result = lambda: None
+        event.trace = SimpleNamespace(record=lambda *_args, **_kwargs: None)
         event._outline_chain = lambda _: "offline fixture"
         event.get_platform_id = lambda: "test"
         event.result.result_content_type = "llm"

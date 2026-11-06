@@ -55,6 +55,12 @@
     },
     "hint": "超时按静默处理（fail-closed），因为放过一条无关消息会在群里刷屏。实测热态 p50≈1.3s，但空闲后首包会摸到 2.5s 以上，低于 3s 会开始丢正常消息。"
   },
+  "classifier_outage_recovery_enabled": {
+    "description": "文字判定断线恢复",
+    "type": "bool",
+    "default": false,
+    "hint": "默认关闭。开启后文字判定依赖中断会进入固定10分钟冷却和恢复流程；冷却时间不可编辑。"
+  },
   "vision_provider_id": {
     "description": "需要看图时的多模态小模型",
     "type": "string",

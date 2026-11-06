@@ -1,6 +1,6 @@
 # 配置参考
 
-面向使用者与维护者：查参数、默认值及保存范围。插件默认值以 [_conf_schema.json](../_conf_schema.json) 为唯一来源；原生字段来自 [guard_native_settings.py](../guard_native_settings.py)、[guard_native_reply.py](../guard_native_reply.py)，独立生图默认值来自 [guard_image_settings.py](../guard_image_settings.py) 的 `DEFAULTS`。已核对源码：2026-11-04；字段变化时同步更新并运行校验。
+面向使用者与维护者：查参数、默认值及保存范围。插件默认值以 [_conf_schema.json](../_conf_schema.json) 为唯一来源；原生字段来自 [guard_native_settings.py](../guard_native_settings.py)、[guard_native_reply.py](../guard_native_reply.py)，独立生图默认值来自 [guard_image_settings.py](../guard_image_settings.py) 的 `DEFAULTS`。已核对源码：2026-11-06；字段变化时同步更新并运行校验。
 
 ## 配置保存在哪里
 
@@ -42,6 +42,7 @@
 | `participation_confidence_threshold` | `65` | 普通群消息参与判断 |
 | `classifier_provider_id` | `""` | 判定用的小模型 |
 | `classifier_timeout_seconds` | `3.5` | 判定超时（秒） |
+| `classifier_outage_recovery_enabled` | `false` | 文字判定断线恢复 |
 | `vision_provider_id` | `""` | 需要看图时的多模态小模型 |
 | `gate_image_cache_ttl_seconds` | `300` | 图片观察缓存时间（秒） |
 | `vision_timeout_seconds` | `6` | 多模态判定超时（秒） |

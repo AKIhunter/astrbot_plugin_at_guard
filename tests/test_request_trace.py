@@ -312,7 +312,8 @@ class TraceTests(unittest.IsolatedAsyncioTestCase):
 def actual_host_namespace(guard):
     """执行当前宿主注册表、派发函数及MainAgentHooks方法体。"""
     stars = {type(guard).__module__: SimpleNamespace(activated=True, star_cls=guard,
-                                                   name="astrbot_plugin_at_guard")}
+                                                   name="astrbot_plugin_at_guard",
+                                                   display_name="LivingHello")}
     ns = {"enum": enum, "Generic": typing.Generic, "T": typing.TypeVar("T"),
           "overload": typing.overload, "star_map": stars, "inspect": inspect, "traceback": traceback,
           "logger": logging.getLogger("actual-host-trace"), "MessageEventResult": Chain,
@@ -352,6 +353,7 @@ class ActualHostListenerTests(unittest.IsolatedAsyncioTestCase):
         event.plugins_name = ["*"]
         event.is_stopped = lambda: event.stopped
         event.clear_result = lambda: setattr(event, "result", None)
+        event.trace = SimpleNamespace(record=lambda *_args, **_kwargs: None)
         context = SimpleNamespace(context=SimpleNamespace(event=event))
         tool, args = SimpleNamespace(name="search_memory"), {"secret": "never-log"}
         hooks = ns["MainAgentHooks"]()

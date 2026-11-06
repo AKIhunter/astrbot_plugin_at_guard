@@ -20,6 +20,13 @@ def install_framework_stubs():
     api.logger = logging.getLogger("at-guard-offline")
     events = mod("astrbot.api.event")
     events.AstrMessageEvent = object
+    class MessageChain:
+        def __init__(self):
+            self.chain = []
+        def message(self, text):
+            self.chain.append(types.SimpleNamespace(text=text))
+            return self
+    events.MessageChain = MessageChain
 
     class Filters:
         EventMessageType = types.SimpleNamespace(ALL="all", GROUP_MESSAGE="group")

@@ -1,16 +1,18 @@
 import asyncio
 import html
 import importlib
+import inspect
 import json
 import math
 import re
 import time
 from collections import defaultdict, deque
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from sys import maxsize
 
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import At, Image, Plain, Reply
 from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.api.star import Context, Star, StarTools
@@ -25,6 +27,20 @@ try:  # 作为插件包加载时走相对导入
     from .guard_reply_delivery import number
     from .guard_fragments import FragmentWait
     from .guard_expression import Expression, congling_for, takeover
+    from .guard_classifier_outage import (
+        BackfillStatus,
+        COOLDOWN_SECONDS,
+        ClassifierFailure,
+        ClassifierOutageRecovery,
+        FailureDisposition,
+        InvalidOutageTransition,
+        NotificationPhase,
+        OutageState,
+        PendingRecoveryWork,
+        classify_classifier_failure,
+        failure_category_label,
+        redacted_provider_id,
+    )
     from .guard_understanding import Understanding
     from .guard_segments import ReplySegments
     from .guard_evidence import EvidenceMemory
@@ -37,6 +53,20 @@ except ImportError:  # 单文件调试兜底
     from guard_reply_delivery import number
     from guard_fragments import FragmentWait
     from guard_expression import Expression, congling_for, takeover
+    from guard_classifier_outage import (
+        BackfillStatus,
+        COOLDOWN_SECONDS,
+        ClassifierFailure,
+        ClassifierOutageRecovery,
+        FailureDisposition,
+        InvalidOutageTransition,
+        NotificationPhase,
+        OutageState,
+        PendingRecoveryWork,
+        classify_classifier_failure,
+        failure_category_label,
+        redacted_provider_id,
+    )
     from guard_understanding import Understanding
     from guard_segments import ReplySegments
     from guard_evidence import EvidenceMemory
@@ -47,6 +77,7 @@ NO_REPLY_TOKEN = "[[ASTRBOT_NO_REPLY]]"
 MEANINGFUL_TEXT_RE = re.compile(r"[\w\u4e00-\u9fff]")
 PLUGIN_NAME = "astrbot_plugin_at_guard"
 BOT_LINE_PREFIX = "[我]: "
+CONGLING_RECOVERY_CONTRACT = "congling.classifier-recovery.v1"
 
 
 class Main(Star):
@@ -74,6 +105,9 @@ class Main(Star):
         self.recent_images = defaultdict(lambda: deque(maxlen=30))
         self.image_cache = ImageObservationCache()
         self.engine = GateEngine(self.config, self.data_dir, self.logger)
+        self.classifier_outage = ClassifierOutageRecovery(
+            self.config, self.data_dir, self.logger
+        )
         self.reply_delivery = ReplyDelivery(self.config, self.logger)
         self.fragment_wait = FragmentWait()
         self.expression = Expression(self)
@@ -113,6 +147,586 @@ class Main(Star):
                 from guard_image_settings import ImageSettings
             self.image_generation = ImageSettings(self)
         return self.image_generation
+
+    def _outage(self) -> ClassifierOutageRecovery:
+        if not hasattr(self, "classifier_outage"):
+            self.classifier_outage = ClassifierOutageRecovery(
+                self.config, getattr(self, "data_dir", None), self.logger
+            )
+        if (
+            self.classifier_outage.enabled
+            and self.classifier_outage.state is OutageState.DISABLED
+        ) or (
+            not self.classifier_outage.enabled
+            and self.classifier_outage.state is OutageState.HEALTHY
+        ):
+            self.classifier_outage.sync_enabled()
+        return self.classifier_outage
+
+    def _ensure_classifier_probe_runtime(self) -> None:
+        if not hasattr(self, "_classifier_probe_task"):
+            self._classifier_probe_task = None
+        if not hasattr(self, "_classifier_probe_revision"):
+            self._classifier_probe_revision = 0
+        if not hasattr(self, "_classifier_probe_closed"):
+            self._classifier_probe_closed = False
+        if not hasattr(self, "_classifier_probe_platform_id"):
+            self._classifier_probe_platform_id = ""
+        if not hasattr(self, "_classifier_recovery_callbacks"):
+            self._classifier_recovery_callbacks = []
+        if not hasattr(self, "_classifier_recovery_lock"):
+            self._classifier_recovery_lock = asyncio.Lock()
+        if not hasattr(self, "_classifier_recovery_retry_task"):
+            self._classifier_recovery_retry_task = None
+
+    def pending_classifier_recovery(self) -> PendingRecoveryWork | None:
+        """Task 5 entrypoint for the frozen outage window and pending sessions."""
+        return self._outage().pending_recovery()
+
+    def register_classifier_recovery_callback(self, callback):
+        """Register a sync/async Task 5 handoff callback and return its remover."""
+        if not callable(callback):
+            raise TypeError("callback must be callable")
+        self._ensure_classifier_probe_runtime()
+        if callback not in self._classifier_recovery_callbacks:
+            self._classifier_recovery_callbacks.append(callback)
+
+        def remove():
+            try:
+                self._classifier_recovery_callbacks.remove(callback)
+            except ValueError:
+                pass
+
+        return remove
+
+    async def resume_classifier_recovery(self) -> bool:
+        """插件重载后由从绫领取已冻结的同一恢复事件。"""
+        work = self.pending_classifier_recovery()
+        if work is None:
+            self._schedule_classifier_recovery_retry()
+            return False
+        await self._publish_classifier_recovery(work)
+        return True
+
+    async def _publish_classifier_recovery(
+        self, work: PendingRecoveryWork
+    ) -> None:
+        self._ensure_classifier_probe_runtime()
+        async with self._classifier_recovery_lock:
+            current = self.pending_classifier_recovery()
+            if current is None or current.event_id != work.event_id:
+                return
+            callbacks = tuple(self._classifier_recovery_callbacks)
+            callback_failed = False
+            for callback in callbacks:
+                try:
+                    result = callback(current)
+                    if inspect.isawaitable(result):
+                        result = await result
+                except asyncio.CancelledError:
+                    self._mark_classifier_recovery_cancelled(current)
+                    self._schedule_classifier_recovery_retry()
+                    raise
+                except Exception:
+                    self.logger.warning(
+                        "[LivingHello] 断线恢复交接回调失败，待处理窗口仍已保留。"
+                    )
+                    callback_failed = True
+                    continue
+                if self._is_congling_recovery_result(result, current.event_id):
+                    await self._apply_classifier_recovery_result(current, result)
+                    return
+            if callback_failed:
+                await self._apply_classifier_recovery_result(
+                    current,
+                    self._classifier_recovery_fallback(
+                        current, "retry_pending"
+                    ),
+                )
+                return
+
+            registry_supported, handler = self._congling_recovery_entry()
+            if not registry_supported:
+                return
+            if handler is None:
+                await self._apply_classifier_recovery_result(
+                    current,
+                    self._classifier_recovery_fallback(current, "unavailable"),
+                )
+                return
+            try:
+                result = handler(current)
+                if inspect.isawaitable(result):
+                    result = await result
+            except asyncio.CancelledError:
+                self._mark_classifier_recovery_cancelled(current)
+                self._schedule_classifier_recovery_retry()
+                raise
+            except Exception:
+                self.logger.warning(
+                    "[LivingHello] 从绫恢复入口未完成，相关会话已保留待重试。"
+                )
+                result = self._classifier_recovery_fallback(
+                    current, "retry_pending"
+                )
+            if not self._is_congling_recovery_result(result, current.event_id):
+                result = self._classifier_recovery_fallback(
+                    current, "retry_pending"
+                )
+            await self._apply_classifier_recovery_result(current, result)
+
+    def _mark_classifier_recovery_cancelled(
+        self, work: PendingRecoveryWork
+    ) -> None:
+        outage = self._outage()
+        event = outage.current_event
+        if (
+            event is None
+            or event.event_id != work.event_id
+            or outage.state is not OutageState.RECOVERING
+        ):
+            return
+        now = float(outage.clock())
+        for session in work.sessions:
+            current = event.affected_sessions.get(session.session_id)
+            if (
+                current is not None
+                and current.backfill_status
+                in {BackfillStatus.PENDING, BackfillStatus.PROCESSING}
+            ):
+                outage.set_backfill_status(
+                    session.session_id,
+                    BackfillStatus.RETRY_PENDING,
+                    at=now,
+                )
+
+    def _congling_recovery_entry(self):
+        getter = getattr(self.context, "get_registered_star", None)
+        if not callable(getter):
+            return False, None
+        for name in ("astrbot_plugin_congling", "congling"):
+            try:
+                metadata = getter(name)
+            except Exception:
+                continue
+            if metadata is None:
+                continue
+            instance = getattr(metadata, "star_cls", None)
+            if not getattr(metadata, "activated", False) or instance is None:
+                continue
+            handler = getattr(instance, "recover_classifier_outage", None)
+            if callable(handler):
+                return True, handler
+        return True, None
+
+    @staticmethod
+    def _is_congling_recovery_result(result, event_id: str) -> bool:
+        return (
+            isinstance(result, dict)
+            and result.get("contract") == CONGLING_RECOVERY_CONTRACT
+            and str(result.get("event_id") or "") == event_id
+            and isinstance(result.get("sessions"), list)
+        )
+
+    @staticmethod
+    def _classifier_recovery_fallback(
+        work: PendingRecoveryWork, status: str
+    ) -> dict:
+        return {
+            "contract": CONGLING_RECOVERY_CONTRACT,
+            "event_id": work.event_id,
+            "sessions": [
+                {
+                    "session_id": session.session_id,
+                    "status": status,
+                    "dedupe_key": "",
+                }
+                for session in work.sessions
+            ],
+        }
+
+    async def _apply_classifier_recovery_result(
+        self,
+        work: PendingRecoveryWork,
+        result: dict,
+    ) -> None:
+        outage = self._outage()
+        current = outage.current_event
+        if (
+            current is None
+            or current.event_id != work.event_id
+            or outage.state is not OutageState.RECOVERING
+        ):
+            return
+        expected = {session.session_id for session in work.sessions}
+        reported: dict[str, BackfillStatus] = {}
+        accepted = {
+            BackfillStatus.COMPLETED,
+            BackfillStatus.NO_REPLY,
+            BackfillStatus.RETRY_PENDING,
+            BackfillStatus.SEND_UNKNOWN,
+            BackfillStatus.UNAVAILABLE,
+        }
+        for row in result.get("sessions") or []:
+            if not isinstance(row, dict):
+                continue
+            session_id = str(row.get("session_id") or "")
+            if session_id not in expected or session_id in reported:
+                continue
+            try:
+                status = BackfillStatus(str(row.get("status") or ""))
+            except ValueError:
+                status = BackfillStatus.RETRY_PENDING
+            reported[session_id] = (
+                status if status in accepted else BackfillStatus.RETRY_PENDING
+            )
+        for session_id in expected:
+            outage.set_backfill_status(
+                session_id,
+                reported.get(session_id, BackfillStatus.RETRY_PENDING),
+                at=float(outage.clock()),
+            )
+
+        statuses = [
+            session.backfill_status
+            for session in outage.current_event.affected_sessions.values()
+        ]
+        counts = {
+            "completed": statuses.count(BackfillStatus.COMPLETED),
+            "no_reply": statuses.count(BackfillStatus.NO_REPLY),
+            "unavailable": statuses.count(BackfillStatus.UNAVAILABLE),
+            "retry": sum(
+                status in {
+                    BackfillStatus.PENDING,
+                    BackfillStatus.PROCESSING,
+                    BackfillStatus.RETRY_PENDING,
+                    BackfillStatus.SEND_UNKNOWN,
+                }
+                for status in statuses
+            ),
+        }
+        retry_failed = any(
+            status is BackfillStatus.RETRY_PENDING
+            for status in reported.values()
+        ) or any(
+            session_id not in reported for session_id in expected
+        )
+        if retry_failed:
+            platform_id = self._classifier_probe_platform_id
+            if not platform_id and work.sessions:
+                platform_id = work.sessions[0].session_id.split(":", 1)[0]
+            await self.notify_classifier_outage_continued(
+                platform_id=platform_id,
+                at=float(outage.clock()),
+            )
+            self._schedule_classifier_recovery_retry()
+
+        terminal = {
+            BackfillStatus.COMPLETED,
+            BackfillStatus.NO_REPLY,
+            BackfillStatus.UNAVAILABLE,
+        }
+        if all(status in terminal for status in statuses):
+            platform_id = self._classifier_probe_platform_id
+            if not platform_id and work.sessions:
+                platform_id = work.sessions[0].session_id.split(":", 1)[0]
+            await self.notify_classifier_recovered(
+                platform_id=platform_id,
+                counts=counts,
+                at=float(outage.clock()),
+            )
+            outage.transition(OutageState.HEALTHY, at=float(outage.clock()))
+
+    async def _resolve_classifier_probe_provider(self):
+        provider_id = self.engine.provider_id()
+        if provider_id:
+            return self.context.get_provider_by_id(provider_id)
+        resolver = getattr(self.context, "get_using_provider_async", None)
+        if not callable(resolver):
+            return None
+        # None 明确表示无用户会话；健康探测不得借用任何消息 origin。
+        return await resolver(None)
+
+    def request_classifier_outage_probe(
+        self,
+        *,
+        immediate: bool = False,
+        reason: str = "",
+        platform_id: str = "",
+    ) -> bool:
+        """Coalesce timer/config/reload triggers into one lifecycle-owned task."""
+        self._ensure_classifier_probe_runtime()
+        if self._classifier_probe_closed:
+            return False
+        outage = self._outage()
+        event = outage.current_event
+        if event is None or outage.state not in {
+            OutageState.COOLING,
+            OutageState.PROBING,
+            OutageState.NEEDS_ATTENTION,
+        }:
+            return False
+        clean_platform = self._clean_notification_platform_id(platform_id)
+        if clean_platform:
+            self._classifier_probe_platform_id = clean_platform
+        if immediate:
+            # A probe already in flight observes this revision and discards its
+            # result before probing the newly saved provider/configuration.
+            self._classifier_probe_revision += 1
+
+        task = self._classifier_probe_task
+        if task is not None and not task.done():
+            if immediate and outage.state is not OutageState.PROBING:
+                task.cancel()
+            else:
+                return True
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.logger.warning(
+                "[LivingHello] 当前无事件循环，未能安排文字判定健康探测。"
+            )
+            return False
+        task = loop.create_task(
+            self._classifier_probe_worker(event.event_id, immediate=immediate),
+            name=f"livinghello-classifier-probe-{event.event_id[:8]}",
+        )
+        self._classifier_probe_task = task
+        task.add_done_callback(self._classifier_probe_done)
+        self.logger.debug(
+            "[LivingHello] 已安排文字判定健康探测：触发=%s，立即=%s。",
+            str(reason or "cooldown"),
+            immediate,
+        )
+        return True
+
+    def _classifier_probe_done(self, task: asyncio.Task) -> None:
+        if getattr(self, "_classifier_probe_task", None) is task:
+            self._classifier_probe_task = None
+        if task.cancelled():
+            return
+        try:
+            task.exception()
+        except (asyncio.CancelledError, Exception):
+            # The worker contains its own bounded failure handling. Retrieving
+            # the exception here prevents an unobserved-task warning.
+            pass
+
+    def _schedule_classifier_recovery_retry(self) -> bool:
+        self._ensure_classifier_probe_runtime()
+        if self._classifier_probe_closed:
+            return False
+        outage = self._outage()
+        event = outage.current_event
+        due = outage.next_recovery_retry_at()
+        if (
+            event is None
+            or outage.state is not OutageState.RECOVERING
+            or due is None
+        ):
+            return False
+        task = self._classifier_recovery_retry_task
+        if task is not None and not task.done():
+            return True
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return False
+        task = loop.create_task(
+            self._classifier_recovery_retry_worker(event.event_id),
+            name=f"livinghello-classifier-recovery-{event.event_id[:8]}",
+        )
+        self._classifier_recovery_retry_task = task
+        task.add_done_callback(self._classifier_recovery_retry_done)
+        return True
+
+    def _classifier_recovery_retry_done(self, task: asyncio.Task) -> None:
+        if getattr(self, "_classifier_recovery_retry_task", None) is task:
+            self._classifier_recovery_retry_task = None
+        if task.cancelled():
+            return
+        try:
+            task.exception()
+        except (asyncio.CancelledError, Exception):
+            pass
+
+    async def _classifier_recovery_retry_worker(self, event_id: str) -> None:
+        try:
+            while not self._classifier_probe_closed:
+                outage = self._outage()
+                event = outage.current_event
+                if (
+                    event is None
+                    or event.event_id != event_id
+                    or outage.state is not OutageState.RECOVERING
+                ):
+                    return
+                due = outage.next_recovery_retry_at()
+                if due is None:
+                    return
+                delay = max(0.0, due - float(outage.clock()))
+                if delay:
+                    await asyncio.sleep(delay)
+                    continue
+                work = outage.pending_recovery()
+                if work is None:
+                    return
+                await self._publish_classifier_recovery(work)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self.logger.warning(
+                "[LivingHello] 补读重试调度失败，持久状态将在重载后继续。"
+            )
+
+    async def _classifier_probe_worker(
+        self, event_id: str, *, immediate: bool
+    ) -> None:
+        try:
+            while not self._classifier_probe_closed:
+                outage = self._outage()
+                event = outage.current_event
+                if event is None or event.event_id != event_id:
+                    return
+                if outage.state is OutageState.COOLING:
+                    now = float(outage.clock())
+                    delay = 0.0 if immediate else max(
+                        0.0, float(event.cooldown_until or now) - now
+                    )
+                    if delay:
+                        await asyncio.sleep(delay)
+                        continue
+                elif outage.state is OutageState.NEEDS_ATTENTION:
+                    if not immediate:
+                        return
+                elif outage.state is not OutageState.PROBING:
+                    return
+
+                provider_label = redacted_provider_id(
+                    self.engine.provider_label() or "current_provider"
+                )
+                token = outage.begin_probe(
+                    provider_label,
+                    force=immediate
+                    or outage.state in {
+                        OutageState.PROBING,
+                        OutageState.NEEDS_ATTENTION,
+                    },
+                    at=float(outage.clock()),
+                )
+                if token is None:
+                    immediate = False
+                    continue
+                immediate = False
+
+                while True:
+                    revision = self._classifier_probe_revision
+                    provider_label = redacted_provider_id(
+                        self.engine.provider_label() or "current_provider"
+                    )
+                    outage.begin_probe(
+                        provider_label, force=True, at=float(outage.clock())
+                    )
+                    try:
+                        failure = await self.engine.probe_classifier(
+                            self._resolve_classifier_probe_provider
+                        )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        failure = classify_classifier_failure(exception=exc) or (
+                            ClassifierFailure(
+                                "configuration_error",
+                                FailureDisposition.NEEDS_ATTENTION,
+                            )
+                        )
+                    current = outage.current_event
+                    if current is None or current.event_id != token:
+                        return
+                    if revision != self._classifier_probe_revision:
+                        continue
+                    break
+
+                now = float(outage.clock())
+                if failure is None:
+                    work = outage.complete_probe_success(token, at=now)
+                    self.logger.info(
+                        "[LivingHello] 文字判定健康探测成功，故障窗口已冻结。"
+                    )
+                    await self._publish_classifier_recovery(work)
+                    return
+
+                state = outage.complete_probe_failure(token, failure, at=now)
+                self.logger.warning(
+                    "[LivingHello] 文字判定健康探测未通过：类别=%s，状态=%s。",
+                    failure.category,
+                    state.value,
+                )
+                if state is not OutageState.COOLING:
+                    return
+                await self.notify_classifier_outage_continued(
+                    platform_id=self._classifier_probe_platform_id,
+                    at=now,
+                )
+                # Keep ownership of the only timer across repeated cycles.
+                immediate = False
+        except asyncio.CancelledError:
+            raise
+        except InvalidOutageTransition:
+            self.logger.warning(
+                "[LivingHello] 健康探测结果已过期，未改写当前故障状态。"
+            )
+        except Exception:
+            # A scheduler bug must not strand a persisted event in PROBING.
+            outage = self._outage()
+            current = outage.current_event
+            if (
+                current is not None
+                and current.event_id == event_id
+                and outage.state is OutageState.PROBING
+            ):
+                try:
+                    outage.complete_probe_failure(
+                        event_id,
+                        ClassifierFailure(
+                            "configuration_error",
+                            FailureDisposition.NEEDS_ATTENTION,
+                        ),
+                        at=float(outage.clock()),
+                    )
+                except Exception:
+                    pass
+            self.logger.warning(
+                "[LivingHello] 健康探测调度失败，已停止自动推进并等待配置处理。"
+            )
+
+    @staticmethod
+    def _clean_notification_platform_id(value: str) -> str:
+        result = str(value or "").strip()
+        if (
+            not result
+            or ":" in result
+            or "://" in result
+            or any(ord(character) < 32 for character in result)
+        ):
+            return ""
+        return result
+
+    async def _close_classifier_probe_task(self) -> None:
+        self._ensure_classifier_probe_runtime()
+        self._classifier_probe_closed = True
+        tasks = (
+            self._classifier_probe_task,
+            self._classifier_recovery_retry_task,
+        )
+        for task in tasks:
+            if task is None or task.done():
+                continue
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     def _claims_image_understanding(self, event: AstrMessageEvent) -> bool:
         """图片由LivingHello独立理解；Reply可能需要稍后拉取历史内容才能确认。"""
@@ -375,6 +989,7 @@ class Main(Star):
         await self._delivery().prepare(event)
 
     async def terminate(self):
+        await self._close_classifier_probe_task()
         image_generation = getattr(self, "image_generation", None)
         if image_generation is not None:
             await image_generation.close()
@@ -423,6 +1038,8 @@ class Main(Star):
 
     async def initialize(self) -> None:
         """Register the console bridge, then install bot names as wake prefixes."""
+        self._ensure_classifier_probe_runtime()
+        self._classifier_probe_closed = False
         self._normalize_gate_mode()
         try:
             from .guard_webui import register_webui
@@ -472,6 +1089,14 @@ class Main(Star):
                 )
         except Exception as exc:
             self.logger.warning(f"[智能过滤] 注册机器人称呼失败: {exc!r}")
+        # A reloaded instance must not wait out the old timer again. Persisted
+        # PROBING is also reclaimed here after an interrupted prior instance.
+        self.request_classifier_outage_probe(
+            immediate=True, reason="plugin_reload"
+        )
+        if self.pending_classifier_recovery() is not None:
+            await self.resume_classifier_recovery()
+        self._schedule_classifier_recovery_retry()
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=maxsize)
     async def apply_hard_group_rules(self, event: AstrMessageEvent):
@@ -604,6 +1229,11 @@ class Main(Star):
                 return
             observation_rules.append("inflight")
 
+        if self._handle_classifier_outage_cooling(
+            event, mode, group_key, observation_rules
+        ):
+            return
+
         event.set_extra("_at_guard_observation_rules", list(observation_rules))
         if explicit:
             event.set_extra("_at_guard_fragment_judged", True)
@@ -685,6 +1315,11 @@ class Main(Star):
                 decision = Decision(threshold=self.engine.threshold(), reason="image_cache_busy", source="rule")
         else:
             decision = await judge()
+        outage_failure = await self._handle_classifier_failure(
+            event, decision, mode
+        )
+        if outage_failure is not None:
+            self._redact_classifier_failure_decision(decision)
         # 模型看到的是调用前的快照；调用期间新到的群消息使该结果过时。
         event.set_extra("_at_guard_judged_revision", revision)
         stale_reason = self._stale_reason(event, group_key)
@@ -836,9 +1471,376 @@ class Main(Star):
             if provider is not None:
                 return provider
             self.logger.warning(
-                f"[智能过滤] 判定模型 {provider_id} 不存在，回退到会话当前模型"
+                "[LivingHello] 判定 Provider 不存在，已停止本次普通判定。"
             )
+            return None
         return await self.context.get_using_provider_async(event.unified_msg_origin)
+
+    def _handle_classifier_outage_cooling(
+        self,
+        event: AstrMessageEvent,
+        mode: str,
+        group_key: str,
+        observation_rules: list[str],
+    ) -> bool:
+        outage = self._outage()
+        if not outage.blocks_normal_calls:
+            return False
+        reason = (
+            "classifier_needs_attention"
+            if outage.state is OutageState.NEEDS_ATTENTION
+            else "classifier_cooling"
+        )
+        if mode == "enforce":
+            try:
+                outage.add_affected_session(str(event.unified_msg_origin), at=time.time())
+            except (TypeError, ValueError):
+                self.logger.warning(
+                    "[LivingHello] 断线恢复未能记录会话标识，已继续静默。"
+                )
+            self.engine.note_generation_skipped()
+            self._record_classifier_outage_skip(
+                event, group_key, mode, "silence", reason
+            )
+            event.set_extra("_at_guard_confidence_score", 0)
+            event.set_extra(
+                "_at_guard_confidence_threshold", self.engine.threshold()
+            )
+            event.set_extra("_at_guard_decision", {
+                "score": 0,
+                "threshold": self.engine.threshold(),
+                "action": "silence",
+                "reason": reason,
+                "source": "outage",
+                "failure_category": (
+                    outage.current_event.error_category
+                    if outage.current_event is not None
+                    else ""
+                ),
+            })
+            event.stop_event()
+            emit(event, "decision", "skipped", calls=0, reason=reason)
+            emit(event, "main_model", "skipped", calls=0, reason=reason)
+            self._trace().finish(event, "silent", reason)
+            return True
+
+        observation_rules.append(reason)
+        event.set_extra("_at_guard_observation_rules", list(observation_rules))
+        self._record_classifier_outage_skip(
+            event, group_key, mode, "reply", reason
+        )
+        emit(event, "decision", "skipped", calls=0, reason=reason)
+        return True
+
+    def _record_classifier_outage_skip(
+        self,
+        event: AstrMessageEvent,
+        group_key: str,
+        mode: str,
+        action: str,
+        reason: str,
+    ) -> None:
+        meta = self._message_meta(event)
+        self.engine.log.add({
+            "ts": int(time.time()),
+            "gid": str(group_key),
+            "session_id": str(meta.get("session_id") or ""),
+            "session_type": str(meta.get("session_type") or ""),
+            "group_id": str(meta.get("group_id") or ""),
+            "private_qq": str(meta.get("private_qq") or ""),
+            "mode": mode,
+            "src": "outage",
+            "action": action,
+            "reason": reason,
+            "score": 0,
+            "th": self.engine.threshold(),
+            "gen_skipped": mode == "enforce",
+            "failure_category": (
+                self._outage().current_event.error_category
+                if self._outage().current_event is not None
+                else ""
+            ),
+            **self._trace().identity(event),
+        })
+
+    async def _handle_classifier_failure(
+        self,
+        event: AstrMessageEvent,
+        decision: Decision,
+        mode: str,
+    ):
+        if decision.source != "error" or decision.stage != "text":
+            return None
+        failure = classify_classifier_failure(
+            decision.reason, category=decision.failure_category
+        )
+        outage = self._outage()
+        if failure is None or not outage.enabled:
+            return None
+
+        created = False
+        if outage.current_event is None and outage.state is OutageState.HEALTHY:
+            target = (
+                OutageState.COOLING
+                if failure.disposition is FailureDisposition.RECOVERABLE
+                else OutageState.NEEDS_ATTENTION
+            )
+            outage.create_event(
+                failure.category,
+                redacted_provider_id(self.engine.provider_label()),
+                state=target,
+                at=time.time(),
+            )
+            created = True
+
+        if mode == "enforce" and outage.current_event is not None:
+            try:
+                outage.add_affected_session(str(event.unified_msg_origin), at=time.time())
+            except (TypeError, ValueError):
+                self.logger.warning(
+                    "[LivingHello] 断线恢复未能记录会话标识，已继续静默。"
+                )
+
+        self.logger.warning(
+            "[LivingHello] 文字判定依赖不可用：类别=%s，状态=%s，Provider=%s。",
+            failure.category,
+            outage.state.value,
+            redacted_provider_id(self.engine.provider_label()),
+        )
+        if created:
+            platform_id = self._notification_platform_id(event)
+            self._ensure_classifier_probe_runtime()
+            clean_platform = self._clean_notification_platform_id(platform_id)
+            if clean_platform:
+                self._classifier_probe_platform_id = clean_platform
+            if outage.state is OutageState.COOLING:
+                self.request_classifier_outage_probe(
+                    reason="cooldown_started",
+                    platform_id=platform_id,
+                )
+            await self._notify_classifier_admins(
+                NotificationPhase.INTERRUPTED,
+                platform_id=platform_id,
+                cycle=0,
+                at=time.time(),
+            )
+        return failure
+
+    @staticmethod
+    def _redact_classifier_failure_decision(decision: Decision) -> None:
+        current = {}
+        chat_data = decision.chat_data if isinstance(decision.chat_data, dict) else {}
+        raw_current = chat_data.get("current_message")
+        if isinstance(raw_current, dict):
+            current = {
+                key: raw_current[key]
+                for key in (
+                    "session_id",
+                    "session_type",
+                    "group_id",
+                    "private_qq",
+                    "explicit_call",
+                    "has_images",
+                )
+                if key in raw_current
+            }
+        decision.raw = ""
+        decision.context = ""
+        decision.memory_lines = ()
+        decision.memory_grounded = False
+        decision.image_summaries = []
+        decision.image_sources = []
+        decision.chat_data = {
+            "current_message": current,
+            "not_sent": True,
+            "outage_redacted": True,
+        }
+
+    def _astrbot_admin_ids(self) -> list[str]:
+        try:
+            config = self.context.get_config()
+            raw = config.get("admins_id") if hasattr(config, "get") else []
+        except Exception:
+            raw = []
+        if isinstance(raw, str):
+            raw = [raw]
+        result: list[str] = []
+        for value in raw or []:
+            admin_id = str(value or "").strip()
+            if (
+                admin_id
+                and admin_id.casefold() != "astrbot"
+                and "://" not in admin_id
+                and not any(ord(character) < 32 for character in admin_id)
+                and admin_id not in result
+            ):
+                result.append(admin_id)
+        return result
+
+    @staticmethod
+    def _notification_platform_id(event: AstrMessageEvent | None) -> str:
+        if event is None:
+            return ""
+        try:
+            value = str(event.get_platform_id() or "").strip()
+        except Exception:
+            value = str(getattr(event, "unified_msg_origin", "") or "").split(
+                ":", 1
+            )[0].strip()
+        if (
+            not value
+            or ":" in value
+            or "://" in value
+            or any(ord(character) < 32 for character in value)
+        ):
+            return ""
+        return value
+
+    @staticmethod
+    def _notification_time(value: float | None) -> str:
+        if value is None:
+            return "无"
+        try:
+            return datetime.fromtimestamp(float(value)).astimezone().strftime(
+                "%Y-%m-%d %H:%M:%S %Z"
+            )
+        except (OSError, OverflowError, TypeError, ValueError):
+            return "未知"
+
+    def _classifier_notification_text(
+        self,
+        phase: NotificationPhase,
+        *,
+        counts: dict[str, int] | None = None,
+    ) -> str:
+        event = self._outage().current_event
+        if event is None:
+            return ""
+        state_label = {
+            NotificationPhase.INTERRUPTED: "中断",
+            NotificationPhase.CONTINUED: "持续不可用",
+            NotificationPhase.RECOVERED: "恢复",
+        }[phase]
+        lines = [
+            f"LivingHello 文字判定状态：{state_label}",
+            f"Provider：{redacted_provider_id(event.provider_id)}",
+            f"类别：{failure_category_label(event.error_category)}",
+            f"首次发生：{self._notification_time(event.started_at)}",
+            f"本轮冷却结束：{self._notification_time(event.cooldown_until)}",
+            f"受影响会话：{len(event.affected_sessions)}",
+            "需要人工处理："
+            + ("是" if event.state is OutageState.NEEDS_ATTENTION else "否"),
+        ]
+        if phase is NotificationPhase.RECOVERED:
+            summary = counts or {}
+            lines.append(
+                "补读结果：成功 {completed}，无需回复 {no_reply}，"
+                "待重试 {retry}，不可用 {unavailable}".format(
+                    completed=max(0, int(summary.get("completed", 0) or 0)),
+                    no_reply=max(0, int(summary.get("no_reply", 0) or 0)),
+                    unavailable=max(
+                        0, int(summary.get("unavailable", 0) or 0)
+                    ),
+                    retry=max(0, int(summary.get("retry", 0) or 0)),
+                )
+            )
+        return "\n".join(lines)
+
+    async def _notify_classifier_admins(
+        self,
+        phase: NotificationPhase,
+        *,
+        platform_id: str,
+        cycle: int,
+        counts: dict[str, int] | None = None,
+        at: float | None = None,
+    ) -> int:
+        outage = self._outage()
+        if outage.current_event is None:
+            return 0
+        admins = self._astrbot_admin_ids()
+        if not admins:
+            self.logger.warning(
+                "[LivingHello] 未配置 AstrBot admins_id，判定状态仅写入日志和状态。"
+            )
+            return 0
+        platform_id = str(platform_id or "").strip()
+        if (
+            not platform_id
+            or ":" in platform_id
+            or "://" in platform_id
+            or any(ord(character) < 32 for character in platform_id)
+        ):
+            self.logger.warning(
+                "[LivingHello] 无可用私聊平台，管理员通知仅保留状态。"
+            )
+            return 0
+        text = self._classifier_notification_text(phase, counts=counts)
+        if not text:
+            return 0
+        sent_count = 0
+        now = time.time() if at is None else float(at)
+        for admin_id in admins:
+            if not outage.reserve_notification(
+                phase, admin_id, cycle=cycle, at=now
+            ):
+                continue
+            try:
+                sent = await self.context.send_message(
+                    f"{platform_id}:FriendMessage:{admin_id}",
+                    MessageChain().message(text),
+                )
+                if sent is False:
+                    raise RuntimeError("platform unavailable")
+            except Exception:
+                self.logger.warning(
+                    "[LivingHello] 管理员私聊通知发送结果未知，已停止本周期重试。"
+                )
+            else:
+                sent_count += 1
+        return sent_count
+
+    async def notify_classifier_outage_continued(
+        self,
+        *,
+        platform_id: str,
+        cycle: int | None = None,
+        at: float | None = None,
+    ) -> int:
+        """Task 4 may call this after a failed health probe."""
+        event = self._outage().current_event
+        if event is None:
+            return 0
+        now = time.time() if at is None else float(at)
+        if cycle is None:
+            cycle = max(1, int(max(0.0, now - event.started_at) // COOLDOWN_SECONDS))
+        return await self._notify_classifier_admins(
+            NotificationPhase.CONTINUED,
+            platform_id=platform_id,
+            cycle=cycle,
+            at=now,
+        )
+
+    async def notify_classifier_recovered(
+        self,
+        *,
+        platform_id: str,
+        counts: dict[str, int] | None = None,
+        at: float | None = None,
+    ) -> int:
+        """Task 4 may call this before closing the active outage event."""
+        event = self._outage().current_event
+        if event is None:
+            return 0
+        now = time.time() if at is None else float(at)
+        cycle = max(0, int(max(0.0, now - event.started_at) // COOLDOWN_SECONDS))
+        return await self._notify_classifier_admins(
+            NotificationPhase.RECOVERED,
+            platform_id=platform_id,
+            cycle=cycle,
+            counts=counts,
+            at=now,
+        )
 
     async def _resolve_vision_provider(self):
         label = self.engine.vision_label()

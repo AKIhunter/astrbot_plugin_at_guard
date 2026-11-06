@@ -130,6 +130,27 @@
   .reply-layout .row { grid-template-columns: minmax(0, 1fr) minmax(140px, 1fr); padding: 10px 0; }
   .reply-layout .field-control:has(input[type="checkbox"]),
   .reply-layout .native-toggle { justify-content: flex-end; }
+  .outage-recovery-card { margin-top: 16px; scroll-margin-top: 16px; }
+  .outage-recovery-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+  .outage-recovery-head .sub { margin-bottom: 0; }
+  .outage-status-grid {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px; margin-top: 12px;
+  }
+  .outage-status-item {
+    min-width: 0; padding: 9px 10px; border: 1px solid var(--line-soft);
+    border-radius: 8px; background: var(--bg);
+  }
+  .outage-status-item dt {
+    margin: 0 0 2px; color: var(--muted); font-size: 11px;
+  }
+  .outage-status-item dd {
+    margin: 0; color: var(--text); font-size: 12px;
+    overflow-wrap: anywhere; word-break: break-word;
+  }
   .native-toggle input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
   .native-wide { grid-column: 1 / -1; }
   .native-wide textarea { min-height: 76px; font-family: ui-monospace, monospace; }
@@ -296,10 +317,78 @@
   .flow-main { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
   .flow-main b { font-size: 12.5px; }
   .flow-status { color: var(--muted); font-size: 11.5px; }
-  .request-flow-note { margin-top: 2px; color: var(--muted); font-size: 11.5px; }
+  .request-flow-note {
+    margin-top: 2px; color: var(--muted); font-size: 11.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .trace-tone-normal .flow-number, .trace-tone-normal .flow-status,
+  .trace-compact-cell.trace-tone-normal b, .trace-compact-cell.trace-tone-normal small {
+    color: var(--ok);
+  }
+  .trace-tone-normal .flow-number, .trace-compact-cell.trace-tone-normal {
+    border-color: var(--ok);
+  }
+  .trace-tone-abnormal .flow-number, .trace-tone-abnormal .flow-status,
+  .trace-compact-cell.trace-tone-abnormal b, .trace-compact-cell.trace-tone-abnormal small {
+    color: var(--bad);
+  }
+  .trace-tone-abnormal .flow-number, .trace-compact-cell.trace-tone-abnormal {
+    border-color: var(--bad);
+  }
+  .trace-tone-observe .flow-number, .trace-tone-observe .flow-status,
+  .trace-compact-cell.trace-tone-observe b, .trace-compact-cell.trace-tone-observe small {
+    color: var(--warn);
+  }
+  .trace-tone-observe .flow-number, .trace-compact-cell.trace-tone-observe {
+    border-color: var(--warn);
+  }
+  .trace-tone-neutral .flow-number, .trace-tone-neutral .flow-status,
+  .trace-compact-cell.trace-tone-neutral b, .trace-compact-cell.trace-tone-neutral small {
+    color: var(--muted);
+  }
+  .trace-grid, .feature-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+    gap: 6px; margin: 8px 0 4px; padding: 0; list-style: none;
+  }
+  .trace-compact-cell {
+    min-width: 0; padding: 7px 9px; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--bg);
+  }
+  .trace-compact-cell b {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text); font-size: 11.5px; font-weight: 600;
+  }
+  .trace-compact-cell small {
+    display: block; margin-top: 1px; overflow-wrap: anywhere;
+    color: var(--muted); font-size: 10.5px; line-height: 1.4;
+  }
   .trace-details { margin-top: 8px; border-top: 1px solid var(--line-soft); padding-top: 8px; }
   .trace-details > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
   .trace-details[open] > summary { color: var(--text); }
+  .classifier-input {
+    overflow: hidden; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel);
+  }
+  .classifier-input-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 10px; border-bottom: 1px solid var(--line-soft);
+  }
+  .classifier-input-notice { min-width: 0; color: var(--muted); font-size: 11px; }
+  .classifier-input-notice.warn { color: var(--warn); }
+  .classifier-input-part { padding: 9px 10px; border-top: 1px solid var(--line-soft); }
+  .classifier-input-head + .classifier-input-part { border-top: 0; }
+  .classifier-input-part:nth-of-type(even) { background: var(--bg); }
+  .classifier-input-part h5 {
+    margin: 0 0 5px; color: var(--muted); font-size: 11px; font-weight: 650;
+  }
+  .classifier-input-part pre, .model-raw-output {
+    margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
+    font: 11.5px/1.55 ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+  }
+  .model-raw-output {
+    max-height: 240px; overflow: auto; padding: 10px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+  }
   .modal-mask {
     position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000;
     display: none; align-items: center; justify-content: center; padding: 24px;
@@ -426,6 +515,7 @@
     .card { padding: 14px 16px; }
     .reply-layout .card { padding: 14px 16px; }
     .reply-layout .row { grid-template-columns: minmax(0, 1fr) minmax(100px, 1fr); }
+    .outage-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .head .spacer { display: none; }
     .head h1 { flex: 1 0 60%; }
     .row { grid-template-columns: minmax(110px, .8fr) minmax(0, 1fr); gap: 6px 10px; }
@@ -436,11 +526,15 @@
   }
   @media (max-width: 480px) {
     .timing-grid { grid-template-columns: 1fr; }
+    .outage-status-grid { grid-template-columns: 1fr; }
+    .trace-grid, .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .classifier-input-head { align-items: flex-start; flex-direction: column; }
     .modal .modal-head, .modal .modal-body { padding-left: 12px; padding-right: 12px; }
   }
   @media (max-width: 380px) {
     .row { grid-template-columns: 1fr; }
     .modes { grid-template-columns: 1fr; }
+    .trace-grid, .feature-grid { grid-template-columns: 1fr; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
@@ -594,7 +688,7 @@
 <div id="panel-reply" role="tabpanel" aria-labelledby="tab-reply" hidden>
 <div class="config-heading">
   <div><h2>回复与私聊</h2><p>引用、@与清理按开关生效；分段与AstrBot共用配置。点击 ? 查看示例。</p></div>
-  <nav class="section-links" aria-label="回复分组"><a href="#expression">回复方式</a><a href="#nativeSegments">原生分段</a><a href="#rhythm">回复节奏</a><a href="#recall">撤回保护</a><a href="#mentions">称呼私聊</a><a href="#understanding">内容理解</a></nav>
+  <nav class="section-links" aria-label="回复分组"><a href="#expression">回复方式</a><a href="#nativeSegments">原生分段</a><a href="#rhythm">回复节奏</a><a href="#recall">撤回保护</a><a href="#mentions">称呼私聊</a><a href="#understanding">内容理解</a><a href="#outageRecovery">断线恢复</a></nav>
 </div>
 <div class="config-columns reply-layout">
   <div class="reply-stack">
@@ -648,6 +742,25 @@
     </section>
   </div>
 </div>
+<section class="card outage-recovery-card" id="outageRecovery" aria-labelledby="outageRecoveryTitle">
+  <div class="outage-recovery-head">
+    <div>
+      <h2 id="outageRecoveryTitle">断线恢复</h2>
+      <p class="sub">仅监控文字判定依赖；开启后使用固定 10 分钟冷却，当前状态与历史补读摘要在此显示。</p>
+    </div>
+    <span class="badge" id="outageStatusBadge" role="status">加载中</span>
+  </div>
+  <div id="outageRecoveryFields"></div>
+  <dl class="outage-status-grid" id="outageStatusGrid" aria-live="polite">
+    <div class="outage-status-item"><dt>当前状态</dt><dd id="outageState">读取中…</dd></div>
+    <div class="outage-status-item"><dt>冷却时间</dt><dd id="outageCooldown">固定 10 分钟</dd></div>
+    <div class="outage-status-item"><dt>文字判定 Provider</dt><dd id="outageProvider">读取中…</dd></div>
+    <div class="outage-status-item"><dt>有效管理员</dt><dd id="outageAdmins">读取中…</dd></div>
+    <div class="outage-status-item"><dt>最近故障 / 恢复</dt><dd id="outageEvent">读取中…</dd></div>
+    <div class="outage-status-item"><dt>受影响会话</dt><dd id="outageAffected">读取中…</dd></div>
+    <div class="outage-status-item"><dt>最近补读结果</dt><dd id="outageBackfill">读取中…</dd></div>
+  </dl>
+</section>
 </div>
 
 </main>
@@ -1321,6 +1434,9 @@
     { key: "empty_mention_persona_prompt", label: "@ 人格要求", type: "textarea" },
     { key: "apply_to_private", label: "过滤私聊", type: "bool" },
   ];
+  const OUTAGE_FIELDS = [
+    { key: "classifier_outage_recovery_enabled", label: "启用断线恢复", type: "bool" },
+  ];
 
   // 标题问号和搜索手册共享同一份文案，避免新参数只更新其中一处。
   const FIELD_HELP = {
@@ -1351,6 +1467,7 @@
     empty_mention_reply: { desc: "只在「固定文案」模式生效，不调用模型。", ex: "填「在呢，怎么啦？」：群友只 @ 机器人时直接发送这一句。" },
     empty_mention_persona_prompt: { desc: "只在「按人格生成」模式生效，补充简短回应要求；人格身份沿用当前会话。", ex: "填「用当前人格的口吻，简短回应一句，不编造用户意图」。" },
     apply_to_private: { desc: "开启后私聊也受参与判断约束；关闭仅跳过参与判断，碎片等待、表达与撤回由独立开关控制。", ex: "关闭：私聊不被本插件的阈值拦住；开启：私聊理解不清时也可能静默。" },
+    classifier_outage_recovery_enabled: { desc: "默认关闭。开启后文字判定依赖中断会进入固定 10 分钟冷却；冷却时长不可编辑。", ex: "开启并保存：正常时显示健康；依赖中断后按当前恢复阶段显示状态与摘要。" },
   };
   const FIELD_EXAMPLE_2 = {
     participation_confidence_threshold: "设 80：机器人只在明确被邀请、上下文完整且参与价值很高时主动接话。",
@@ -1380,6 +1497,7 @@
     empty_mention_reply: "填「我在，继续说」：只 @ 没有正文时直接发送，不产生模型费用。",
     empty_mention_persona_prompt: "要求「只回一句，不使用表情」：仍沿用当前会话人格，只约束本次空 @ 回应。",
     apply_to_private: "开启：私聊同样经过参与评分；碎片等待是否开启仍由独立私聊开关决定。",
+    classifier_outage_recovery_enabled: "关闭：保持现有失败关闭行为，不建立故障事件、不通知管理员，也不补读历史。",
   };
   const MODE_CONFIG_HELP = {
     desc: "控制参与判断是否拦截消息。硬闸门按结论决定是否生成；观察模式同步完成判断并记录，但不执行参与拦截，仍有判定等待和API用量。",
@@ -1402,6 +1520,7 @@
     { id: "expressionFields", title: "回复方式", fields: EXPRESSION_FIELDS },
     { id: "understandingFields", title: "看得懂什么", fields: UNDERSTANDING_FIELDS },
     { id: "recallFields", title: "撤回保护", fields: RECALL_FIELDS },
+    { id: "outageRecoveryFields", title: "断线恢复", fields: OUTAGE_FIELDS },
   ];
   const POLICY_KEYS = new Set(["gate_mode",
     ...GATE_FIELDS.map(f=>f.key), ...VISION_FIELDS.map(f=>f.key), ...CONTEXT_FIELDS.map(f=>f.key)]);
@@ -1689,6 +1808,69 @@
   function currentConfig(key) {
     return Object.prototype.hasOwnProperty.call(state.draft, key)
       ? state.draft[key] : (state.data.config || {})[key];
+  }
+
+  const OUTAGE_STATE = {
+    loading: ["加载中", "正在读取断线恢复状态", ""],
+    disabled: ["已关闭", "功能关闭；文字判定失败继续按现有规则静默", ""],
+    healthy: ["正常", "文字判定依赖当前正常", "on"],
+    cooling: ["冷却中", "已暂停普通文字判定调用", "warn"],
+    probing: ["探测中", "冷却结束，正在检查文字判定依赖", "warn"],
+    recovering: ["恢复中", "依赖已恢复，正在补读受影响会话", "warn"],
+    needs_attention: ["需处理", "认证、配置或 Provider 需要管理员处理", "off"],
+    error: ["读取失败", "断线恢复状态暂时无法读取", "off"],
+  };
+  const OUTAGE_ERROR = {
+    timeout: "调用超时", connection_error: "连接失败", http_429: "请求过多",
+    http_500: "上游 500", http_502: "上游 502", http_503: "上游 503",
+    empty_response: "空响应", protocol_error: "协议格式错误",
+    authentication_error: "认证失败", provider_missing: "Provider 缺失",
+    configuration_error: "配置错误",
+  };
+
+  function renderOutageRecovery(data) {
+    const failed = !data || data.read_health === "error";
+    const stateName = failed ? "error" : (OUTAGE_STATE[data.state] ? data.state : "error");
+    const [label, description, tone] = OUTAGE_STATE[stateName];
+    const badge = el("outageStatusBadge");
+    badge.textContent = label;
+    badge.className = "badge" + (tone ? " " + tone : "");
+    el("outageState").textContent = description;
+    if (!data) {
+      ["outageProvider","outageAdmins","outageEvent","outageAffected","outageBackfill"]
+        .forEach(id => { el(id).textContent = "读取失败"; });
+      el("outageCooldown").textContent = "固定 10 分钟";
+      return;
+    }
+    const minutes = Number(data.cooldown_minutes) || 10;
+    const hasRemaining = data.cooldown_remaining_seconds != null;
+    const remaining = Number(data.cooldown_remaining_seconds);
+    el("outageCooldown").textContent = stateName === "cooling" && hasRemaining && Number.isFinite(remaining)
+      ? "剩余 " + Math.max(0, Math.ceil(remaining / 60)) + " 分钟 · 固定 " + minutes + " 分钟"
+      : "固定 " + minutes + " 分钟";
+    el("outageProvider").textContent = data.provider_display || "未识别";
+    const admins = Array.isArray(data.admins) ? data.admins : [];
+    el("outageAdmins").textContent = admins.length
+      ? admins.join("、") + "（" + admins.length + " 人）"
+      : "未配置有效 AstrBot 全局管理员";
+    if (data.last_failure_at) {
+      const category = OUTAGE_ERROR[data.last_error_category]
+        || (data.last_error_category ? "已脱敏：" + data.last_error_category : "类型未记录");
+      el("outageEvent").textContent = "故障 " + fmtTime(data.last_failure_at) + " · " + category
+        + (data.last_recovered_at ? "；恢复 " + fmtTime(data.last_recovered_at) : "；尚未恢复");
+    } else {
+      el("outageEvent").textContent = "暂无故障记录";
+    }
+    el("outageAffected").textContent = (Number(data.affected_session_count) || 0) + " 个";
+    const backfill = data.backfill || {};
+    const parts = [
+      ["完成", backfill.completed], ["无需回复", backfill.no_reply],
+      ["处理中", backfill.processing], ["待处理", backfill.pending],
+      ["待重试", backfill.retry_pending], ["结果未知", backfill.send_unknown],
+      ["不可用", backfill.unavailable],
+    ].filter(([, count]) => Number(count) > 0)
+      .map(([name, count]) => name + " " + Number(count));
+    el("outageBackfill").textContent = parts.length ? parts.join(" · ") : "暂无补读记录";
   }
 
   function syncFieldAvailability() {
@@ -2076,6 +2258,7 @@
     running:"执行中",success:"成功",failed:"失败",timeout:"超时",cancelled:"已取消",disabled:"未开启",
     skipped:"未调用 / 跳过",uncollected:"未采集",completed:"已完成",awaiting_delivery:"等待最终投递",
     active:"进行中",incomplete:"结束状态未采集",silent:"已静默",observed:"仅记录",merged:"已合并"};
+  const LISTENER_STATUS={registered:"正常",unregistered:"未注册",unsupported:"宿主不支持",unverified:"无法核实"};
   const TRACE_NAMES={receive:"消息接收",input_parse:"输入解析",fragments:"碎片合并",recall:"撤回保护",
     understanding:"输入理解监听",decision:"参与判定",contracts:"工具与回复要求",main_model:"主模型",
     response:"模型响应",tool_start:"工具开始",tool_end:"工具结束",agent_done:"Agent完成",decorate:"结果处理",
@@ -2086,11 +2269,36 @@
     image_delivery:"图片投递",segments:"分段",expression:"排版 / 引用 / @",typing:"打字等待",
     native_tts:"语音组件投递",native_text_image:"文本转图来源",context_revision:"上下文版本",
     delivery:"最终投递",lifecycle:"请求状态",llm_request:"回复请求入口",decision_attempt:"判定尝试"};
-  const TRACE_PRIORITY=["failed","timeout","cancelled","running","awaiting_delivery","success","completed",
+  const TRACE_PRIORITY=["failed","timeout","cancelled","incomplete","running","awaiting_delivery","active",
+    "observed","success","completed","registered",
     "silent","skipped","disabled","uncollected"];
+  const TRACE_TONES={
+    normal:new Set(["registered","success","completed","silent"]),
+    abnormal:new Set(["unregistered","failed","timeout","cancelled","incomplete"]),
+    observe:new Set(["observed","running","awaiting_delivery","active"]),
+  };
+  function traceTone(status) {
+    if(TRACE_TONES.normal.has(status)) return "normal";
+    if(TRACE_TONES.abnormal.has(status)) return "abnormal";
+    if(TRACE_TONES.observe.has(status)) return "observe";
+    return "neutral";
+  }
+  function flowStatusLabel(status) {
+    if(status==="silent") return "完成 · 静默";
+    if(status==="success" || status==="completed") return "完成";
+    return TRACE_STATUS[status]||status;
+  }
+  function shortTraceReason(value) {
+    const text=String(value ? (REASON_LABEL[value]||value) : "").trim();
+    return text.length>42 ? text.slice(0,41)+"…" : text;
+  }
   function traceStage(trace, keys, fallback) {
     const states=keys.map(key=>trace.features?.[key]?.status).filter(Boolean);
-    return states.sort((a,b)=>TRACE_PRIORITY.indexOf(a)-TRACE_PRIORITY.indexOf(b))[0] || fallback;
+    const rank=status=>{
+      const index=TRACE_PRIORITY.indexOf(status);
+      return index<0 ? TRACE_PRIORITY.length : index;
+    };
+    return states.sort((a,b)=>rank(a)-rank(b))[0] || fallback;
   }
   function traceReason(value) {
     return value ? (REASON_LABEL[value]||value) : "";
@@ -2105,7 +2313,12 @@
       const intro=document.createElement("p");intro.textContent="按实际处理顺序展示主要节点。";host.appendChild(intro);
       const flow=document.createElement("ol");flow.className="request-flow";
       const observed=row.mode==="shadow";
-      const decisionStatus=observed ? "observed" : row.action==="reply" ? "success" : "silent";
+      const tracedDecision=traceStage(trace,["text","vision","main_fallback"],"");
+      const decisionStatus=["failed","timeout","cancelled","incomplete"].includes(tracedDecision)
+        ? tracedDecision
+        : row.src==="error"
+          ? (row.reason==="timeout" || row.reason==="deadline" ? "timeout" : "failed")
+          : observed ? "observed" : row.action==="reply" ? "success" : "silent";
       const modelStatus=traceStage(trace,["main_model","response","agent_done"],
         observed || row.action==="reply" ? "uncollected" : "skipped");
       const toolCalls=trace.summary?.tool_calls;
@@ -2132,13 +2345,15 @@
       ];
       stages.forEach(([name,status,note],index)=>{
         const item=document.createElement("li");
+        item.className="trace-tone-"+traceTone(status);
         const number=document.createElement("span");number.className="flow-number";number.textContent=String(index+1);
         const content=document.createElement("div");
         const main=document.createElement("div");main.className="flow-main";
         const label=document.createElement("b");label.textContent=name;
         const state=document.createElement("span");state.className="flow-status";
-        state.textContent=TRACE_STATUS[status]||status;
-        const detail=document.createElement("div");detail.className="request-flow-note";detail.textContent=note;
+        state.textContent=flowStatusLabel(status);
+        const detail=document.createElement("div");detail.className="request-flow-note";
+        detail.textContent=note;detail.title=note;
         main.append(label,state);content.append(main,detail);item.append(number,content);flow.appendChild(item);
       });
       host.appendChild(flow);
@@ -2157,23 +2372,31 @@
       }
       const coverageTitle=document.createElement("h4");coverageTitle.className="modal-sec";
       coverageTitle.textContent="监听覆盖";technical.appendChild(coverageTitle);
-      const list=document.createElement("ul");list.className="trace-list";
+      const list=document.createElement("ul");list.className="trace-grid";
       Object.entries(trace.coverage||{}).forEach(([key,value])=>{
-        const li=document.createElement("li");li.textContent=(TRACE_NAMES[key]||key)+"："+(TRACE_STATUS[value.status]||value.status);
+        const li=document.createElement("li");
+        li.className="trace-compact-cell trace-tone-"+traceTone(value.status);
+        const name=document.createElement("b");name.textContent=TRACE_NAMES[key]||key;
+        const status=document.createElement("small");
+        status.textContent=LISTENER_STATUS[value.status]||TRACE_STATUS[value.status]||value.status;
+        li.append(name,status);
         list.appendChild(li);
       });technical.appendChild(list);
       const featureTitle=document.createElement("h4");featureTitle.className="modal-sec";
       featureTitle.textContent="功能执行";technical.appendChild(featureTitle);
-      const grid=document.createElement("div");grid.className="timing-grid";
+      const grid=document.createElement("div");grid.className="feature-grid";
       const keys=[...new Set([...Object.keys(trace.features||{}),"native_tts","native_text_image"])];
       keys.forEach(key=>{
         const feature=trace.features?.[key]||{status:"uncollected"};
-        const cell=document.createElement("div");cell.className="timing-cell";
+        const cell=document.createElement("div");
+        cell.className="trace-compact-cell trace-tone-"+traceTone(feature.status);
         const b=document.createElement("b");b.textContent=TRACE_NAMES[key]||key;
-        const small=document.createElement("small");small.textContent=(TRACE_STATUS[feature.status]||feature.status)+
-          (typeof feature.ms==="number"?" · "+feature.ms+" ms":"")+
-          (typeof feature.calls==="number"?" · "+feature.calls+" 次":"")+
-          (feature.reason?" · "+(REASON_LABEL[feature.reason]||feature.reason):"");
+        const parts=[TRACE_STATUS[feature.status]||feature.status];
+        if(typeof feature.ms==="number") parts.push(feature.ms+" ms");
+        if(typeof feature.calls==="number") parts.push(feature.calls+" 次");
+        const reason=shortTraceReason(feature.reason);
+        if(reason) parts.push(reason);
+        const small=document.createElement("small");small.textContent=parts.join(" · ");
         cell.append(b,small);grid.appendChild(cell);
       });technical.appendChild(grid);
       host.appendChild(technical);
@@ -2385,12 +2608,61 @@
       p.textContent=row.ctx || "原记录未保存上下文；规则过滤或调用失败时可能没有发送判定请求。";
       detailBody.appendChild(p);
     }
-    section("原始输出与请求资料");
-    [row.raw,row.ctx].forEach((value,index)=>{
-      const h=document.createElement("h4");h.textContent=index===0?"模型原始输出":"判定原始输入";
-      const pre=document.createElement("pre");pre.textContent=value||"未记录";
-      detailBody.append(h,pre);
+    section("模型原始输出");
+    const modelRaw=document.createElement("pre");modelRaw.className="model-raw-output";
+    modelRaw.textContent=row.raw||"未记录";detailBody.appendChild(modelRaw);
+
+    section("判定原始输入");
+    const inputData=row.classifier_input||{
+      segmented:false,
+      notice:"旧记录未能自动分段",
+      opening_rules:"",
+      middle_input:row.ctx||"未记录",
+      ending_requirements:"",
+    };
+    const inputBox=document.createElement("div");inputBox.className="classifier-input";
+    const inputHead=document.createElement("div");inputHead.className="classifier-input-head";
+    const inputNotice=document.createElement("span");inputNotice.className="classifier-input-notice";
+    inputNotice.textContent=inputData.notice||(
+      inputData.source==="chat_data" ? "中间输入来自本次保存的结构化 chat_data。" : "按原记录展示。"
+    );
+    if(!inputData.segmented) inputNotice.classList.add("warn");
+    const copyButton=document.createElement("button");copyButton.type="button";copyButton.className="btn";
+    copyButton.textContent="复制复验内容";
+    copyButton.addEventListener("click",async()=>{
+      const text=String(inputData.middle_input??"");
+      let copied=false;
+      try {
+        if(navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          copied=true;
+        }
+      } catch (_) {}
+      if(!copied) {
+        const field=document.createElement("textarea");
+        field.value=text;field.setAttribute("readonly","");
+        field.style.position="fixed";field.style.opacity="0";
+        document.body.appendChild(field);field.select();
+        try { copied=document.execCommand("copy"); } catch (_) {}
+        field.remove();
+      }
+      copyButton.textContent=copied?"已复制中间输入":"复制失败，请手动选择";
     });
+    inputHead.append(inputNotice,copyButton);inputBox.appendChild(inputHead);
+    const inputPart=(title,value)=>{
+      const part=document.createElement("section");part.className="classifier-input-part";
+      const heading=document.createElement("h5");heading.textContent=title;
+      const pre=document.createElement("pre");pre.textContent=value||"未记录";
+      part.append(heading,pre);inputBox.appendChild(part);
+    };
+    if(inputData.segmented) {
+      inputPart("开头规则",inputData.opening_rules);
+      inputPart("中间输入",inputData.middle_input);
+      inputPart("结尾要求",inputData.ending_requirements);
+    } else {
+      inputPart("完整原文",inputData.middle_input);
+    }
+    detailBody.appendChild(inputBox);
     toggleDialog("rawModal", true);
   }
 
@@ -2575,6 +2847,7 @@
     themeModeBadge(data.mode);
     renderModes();
     renderFields();
+    renderOutageRecovery(data.outage_recovery);
     renderStats();
     renderDistribution();
     renderDecisions();
@@ -2598,7 +2871,10 @@
       state.data.budget = data.budget;
       state.data.image_cache = data.image_cache;
       state.data.congling_compat = data.congling_compat;
+      state.data.outage_recovery = data.outage_recovery;
       renderConglingCompat();
+      // 轮询只更新只读状态，不重建开关控件，保留未保存草稿和当前焦点。
+      renderOutageRecovery(data.outage_recovery);
       state.data.distribution = data.distribution;
       renderStats();
       renderDistribution();
@@ -2607,6 +2883,7 @@
     } catch (err) {
       el("dirtyMsg").textContent = "读取失败：" + err.message;
       el("dirtyMsg").className = "msg err";
+      renderOutageRecovery(null);
     }
   }
 
